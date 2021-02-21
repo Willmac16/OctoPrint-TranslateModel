@@ -23,13 +23,13 @@ class TranslateWorker(threading.Thread):
 
 		origPath = self._file_manager.path_on_disk(FileDestinations.LOCAL, self.file)
 
-		longPath = translate.translate(self.x, self.y, origPath)
+		longPath = translate.translate(float(self.x), float(self.y), origPath)
 		shortPath = self._file_manager.path_in_storage(FileDestinations.LOCAL, longPath)
 		path, name = self._file_manager.canonicalize(FileDestinations.LOCAL, longPath)
 
 		newFO = octoprint.filemanager.util.DiskFileWrapper(name, longPath, move=True)
 		self._file_manager.add_file(FileDestinations.LOCAL, longPath, newFO, allow_overwrite=True)
-		self._logger.info("Done with file {}: ({}, {}); saved as {}".format(self.file, self.x, self.y, longPath))
+		self._logger.info("Done with file {}: ({}, {}); saved as {}".format(self.file, self.x, self.y, shortPath))
 		self._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, x=self.x, y=self.y, path=shortPath))
 
 
@@ -37,7 +37,13 @@ class TranslateWorker(threading.Thread):
 class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
                            octoprint.plugin.AssetPlugin,
                            octoprint.plugin.TemplatePlugin,
-						   octoprint.plugin.SimpleApiPlugin):
+						   octoprint.plugin.SimpleApiPlugin,
+						   octoprint.plugin.StartupPlugin):
+
+	##~~ StartupPlugin mixin
+
+	def on_startup(self, host, port):
+		self.translating = []
 
 	##~~ SettingsPlugin mixin
 
@@ -92,11 +98,20 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 		if command == "test":
 			self._logger.info("test called".format())
 		elif command == "translate":
-			x = round(float(data['x']), 3)
-			y = round(float(data['y']), 3)
-			worker = TranslateWorker(self._file_manager, self._logger, self._plugin_manager, x, y, data['file'])
-			worker.start()
+			if octoprint.filemanager.valid_file_type(data['file'], type="gcode"):
+				index = data['file'] + data['x'] + data['y']
 
+				if (index not in self.translating):
+					# x = round(float(data['x']), 3)
+					# y = round(float(data['y']), 3)
+					self.translating.append(index)
+					worker = TranslateWorker(self._file_manager, self._logger, self._plugin_manager, data['x'], data['y'], data['file'])
+					worker.start()
+				else:
+					self._plugin_manager.send_plugin_message("translatemodel", dict(state='running', file=data['file'], x=data['x'], y=data['y']))
+
+			else:
+				self._plugin_manager.send_plugin_message("translatemodel", dict(state='invalid', file=data['file']))
 
 __plugin_name__ = "Translate Model Plugin"
 

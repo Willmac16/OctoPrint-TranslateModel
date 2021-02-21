@@ -55,19 +55,25 @@ $(function() {
 
         self.translate = function() {
             if (self.translateFile()) {
-                console.log(`Translating: ${self.translateFile()} (${self.xShift()},${self.yShift()})`);
-                $.ajax({
-                    url: API_BASEURL + "plugin/translatemodel",
-                    type: "POST",
-                    dataType: "json",
-                    data: JSON.stringify({
-                        command: "translate",
-                        x: self.xShift(),
-                        y: self.yShift(),
-                        file: self.translateFile()
-                    }),
-                    contentType: "application/json; charset=UTF-8"
-                });
+                let index = self.translateFile() + parseFloat(self.xShift()).toFixed(3) + parseFloat(self.yShift()).toFixed(3);
+                if (!(index in self.notifies)) {
+                    $.ajax({
+                        url: API_BASEURL + "plugin/translatemodel",
+                        type: "POST",
+                        dataType: "json",
+                        data: JSON.stringify({
+                            command: "translate",
+                            x: parseFloat(self.xShift()).toFixed(3),
+                            y: parseFloat(self.yShift()).toFixed(3),
+                            file: self.translateFile()
+                        }),
+                        contentType: "application/json; charset=UTF-8"
+                    });
+                } else {
+                    self.notifies[index].update({
+                        title: 'Running Translating Model'});
+                    console.log("File already translating");
+                }
             } else {
                 console.log("Select a file");
             }
@@ -75,21 +81,50 @@ $(function() {
 
         self.onDataUpdaterPluginMessage = function(plugin, data) {
             if (plugin === "translatemodel") {
-                console.log(data);
                 if (data.state === "started") {
                     let index = data.file + data.x + data.y;
-                    console.log(index);
                     self.notifies[index] = new PNotify({
                         title: 'Started Translating Model',
                         type: 'info',
                         text: `Moving ${data.file} (${data.x}, ${data.y})`,
                         hide: false
                     });
+                } else if (data.state === "running") {
+                    let index = data.file + data.x + data.y;
+                    if (index in self.notifies) {
+                        self.notifies[index].update({
+                            title: 'Running Translating Model'});
+                    } else {
+                        self.notifies[index] = new PNotify({
+                            title: 'Running Translating Model',
+                            type: 'info',
+                            text: `Moving ${data.file} (${data.x}, ${data.y})`,
+                            hide: false
+                        });
+                    }
                 } else if (data.state === "finished") {
                     let index = data.file + data.x + data.y;
-                    self.notifies[index].update({
-                        title: 'Finished Translating Model',
-                        text: `${data.file} moved <br/> (${data.x}, ${data.y}) <br/> is available @ ${data.path}`});
+                    if (index in self.notifies) {
+                        self.notifies[index].update({
+                            title: 'Finished Translating Model',
+                            text: `${data.file} moved <br/> (${data.x}, ${data.y}) <br/> is available @ ${data.path}`});
+                        delete self.notifies['index'];
+                    } else {
+                        new PNotify({
+                            title: 'Finished Translating Model',
+                            type: 'info',
+                            text: `${data.file} moved <br/> (${data.x}, ${data.y}) <br/> is available @ ${data.path}`,
+                            hide: false
+                        });
+                    }
+
+                } else if (data.state === "invalid") {
+                    new PNotify({
+                        title: 'Invalid Translate Model',
+                        type: 'error',
+                        text: `Cannot Translate non-gcode file: ${data.file}`,
+                        hide: false
+                    });
                 }
             }
         }
