@@ -68,26 +68,44 @@ std::string translate(float xShift, float yShift, std::string inPath)
     std::regex objStart("^; printing object !(ENDGCODE)");
     std::regex objEnd("^; stop printing object !(ENDGCODE)");
 
-    // std::regex objStart("^; printing object " + object);
-    // std::regex objEnd("^; stop printing object " + object);
+    std::regex start(";AFTER_LAYER_CHANGE");
+    std::regex end("end");
 
+    int inObj = -1;
+    int afterStart = -1;
 
-    bool inObj = false;
 
     while (getline(infile, line))
     {
         // std::cout << "line: " << line << std::endl;
 
-        if (!inObj)
+        if (inObj == -1 && afterStart == -1)
         {
             if (std::regex_match(line, objStart))
                 inObj = true;
+            else if (std::regex_match(line, start))
+                afterStart = true;
+            outfile << line << std::endl;
+        }
+        else if (inObj == 0)
+        {
+            if (std::regex_match(line, objStart))
+                inObj = true;
+            outfile << line << std::endl;
+
+        }
+        else if (afterStart == 0)
+        {
+            if (std::regex_match(line, start))
+                afterStart = true;
             outfile << line << std::endl;
         }
         else
         {
             if (std::regex_match(line, objEnd))
                 inObj = false;
+            else if (std::regex_match(line, end))
+                afterStart = false;
             std::istringstream iss(line);
             char cmd;
             int num;
