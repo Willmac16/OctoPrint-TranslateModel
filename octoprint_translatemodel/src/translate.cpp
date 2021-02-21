@@ -65,73 +65,106 @@ std::string translate(float xShift, float yShift, std::string inPath)
     std::string line;
     std::ofstream outfile(outPath.str());
 
+    std::regex objStart("^; printing object !(ENDGCODE)");
+    std::regex objEnd("^; stop printing object !(ENDGCODE)");
+
+    // std::regex objStart("^; printing object " + object);
+    // std::regex objEnd("^; stop printing object " + object);
+
+
+    bool inObj = false;
+
     while (getline(infile, line))
     {
         // std::cout << "line: " << line << std::endl;
 
-        std::istringstream iss(line);
-        char cmd;
-        int num;
-        if ((iss >> cmd) && toupper(cmd) == 'G')
+        if (!inObj)
         {
-            if ((iss >> num) && num >= 0 && num < 5)
+            if (std::regex_match(line, objStart))
+                inObj = true;
+            outfile << line << std::endl;
+        }
+        else
+        {
+            if (std::regex_match(line, objEnd))
+                inObj = false;
+            std::istringstream iss(line);
+            char cmd;
+            int num;
+            if ((iss >> cmd) && toupper(cmd) == 'G')
             {
-                outfile << "G" << num;
-                char arg;
-                float pos;
-                while ((iss >> arg) && arg != ';')
+                if ((iss >> num) && num >= 0 && num < 4)
                 {
-                    if (arg == '(')
+                    outfile << "G" << num;
+                    char arg;
+                    float pos;
+                    while ((iss >> arg) && arg != ';')
                     {
-                        outfile << arg;
-                        do
+                        if (arg == '(')
                         {
-                            iss >> arg;
                             outfile << arg;
-                        }
-                        while (arg != ')');
-                    }
-                    else
-                    {
-                        pos = parseFloat(&iss);
-                        if (!isnan(pos))
-                        {
-                            switch (toupper(arg))
+                            std::cout << arg;
+                            do
                             {
-                                case 'X':
-                                    outfile << " " << arg << roundTo(3, (pos+xShift));
-                                    break;
-                                case 'Y':
-                                    outfile << " " << arg << roundTo(3, (pos+yShift));
-                                    break;
-                                case 'E':
-                                    outfile << " " << arg << roundTo(5, pos);
-                                    break;
-                                default:
-                                    outfile << " " << arg << roundTo(3, pos);
-                                    break;
+                                iss >> arg;
+                                outfile << arg;
+                                std::cout << arg;
                             }
+                            while (arg != ')');
                         }
                         else
-                            outfile << " " << arg;
+                        {
+                            pos = parseFloat(&iss);
+                            if (!isnan(pos))
+                            {
+                                switch (toupper(arg))
+                                {
+                                    case 'X':
+                                        outfile << " " << arg << roundTo(3, (pos+xShift));
+                                        break;
+                                    case 'Y':
+                                        outfile << " " << arg << roundTo(3, (pos+yShift));
+                                        break;
+                                    case 'E':
+                                        outfile << " " << arg << roundTo(5, pos);
+                                        break;
+                                    default:
+                                        outfile << " " << arg << roundTo(3, pos);
+                                        break;
+                                }
+                            }
+                            else
+                                outfile << " " << arg;
+                        }
+                    }
+
+                    std::string comment;
+                    std::getline(iss, comment);
+
+                    if (comment != "")
+                    {
+                        outfile << " ; " << comment;
+                        std::cout << comment << std::endl;
                     }
                 }
             }
+            else
+            {
+                outfile << line;
+            }
+            outfile << std::endl;
         }
-        else
-            outfile << line;
-        outfile << std::endl;
     }
 
     return outPath.str();
 }
 
+
 // int main(int argc, char *argv[])
 // {
-//     if (argc > 3)
+//     if (argc > 4)
 //     {
-//
-//         translate(std::stof(argv[1]), std::stof(argv[2]), (std::string) argv[3]);
+//         translate(std::stof(argv[1]), std::stof(argv[2]), (std::string) argv[3], (std::string) argv[4]);
 //     }
 //     else
 //         return 1;
@@ -145,7 +178,10 @@ translate_translate(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "ffs", &xShift, &yShift, &path))
         return NULL;
-    std::string opath = translate(xShift, yShift, (std::string) path);
+    std::string opath;
+    Py_BEGIN_ALLOW_THREADS
+    opath = translate(xShift, yShift, (std::string) path);
+    Py_END_ALLOW_THREADS
     return Py_BuildValue("s", opath.c_str());
 }
 

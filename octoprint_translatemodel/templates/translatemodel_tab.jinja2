@@ -4,7 +4,7 @@
     <button title="Refresh Files" class="btn btn-primary pull-left span1" data-bind="click: updateFiles, enable: loginState.hasPermissionKo(access.permissions.FILES_LIST)">
         <i class="fa fa-sync"></i>
     </button>
-    <select id="translate_table" class="span6 pull-left" data-bind="visible: loginState.hasPermissionKo(access.permissions.FILES_LIST), value: translateFile">
+    <select id="translate_table" class="span8 pull-left" data-bind="visible: loginState.hasPermissionKo(access.permissions.FILES_LIST), value: translateFile">
         <option value="" disabled selected>Select a File</option>
     </select>
 </div>

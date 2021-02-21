@@ -17,6 +17,10 @@ $(function() {
         self.yShift = ko.observable(0.0);
         self.translateFile = ko.observable();
 
+        self.fileHide = /.translate_/;
+
+        self.notifies = {};
+
         self.onUserLoggedIn = function () {
             self.updateFiles();
         }
@@ -30,8 +34,10 @@ $(function() {
                             recursiveFileListing(child);
                         });
                     } else {
-                        var file = $("<option></option>").text(entry.name).attr('value', entry.path);
-                        $("#translate_table").append(file);
+                        if (!entry.name.match(self.fileHide)) {
+                            var file = $("<option></option>").text(entry.name).attr('value', entry.path);
+                            $("#translate_table").append(file);
+                        }
                     }
                 };
 
@@ -64,6 +70,27 @@ $(function() {
                 });
             } else {
                 console.log("Select a file");
+            }
+        }
+
+        self.onDataUpdaterPluginMessage = function(plugin, data) {
+            if (plugin === "translatemodel") {
+                console.log(data);
+                if (data.state === "started") {
+                    let index = data.file + data.x + data.y;
+                    console.log(index);
+                    self.notifies[index] = new PNotify({
+                        title: 'Started Translating Model',
+                        type: 'info',
+                        text: `Moving ${data.file} (${data.x}, ${data.y})`,
+                        hide: false
+                    });
+                } else if (data.state === "finished") {
+                    let index = data.file + data.x + data.y;
+                    self.notifies[index].update({
+                        title: 'Finished Translating Model',
+                        text: `${data.file} moved <br/> (${data.x}, ${data.y}) <br/> is available @ ${data.path}`});
+                }
             }
         }
     }

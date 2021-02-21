@@ -6,7 +6,33 @@ from octoprint.filemanager import FileDestinations
 
 import translate
 
-import re
+import re, threading
+
+class TranslateWorker(threading.Thread):
+	def __init__(self, _file_manager, _logger, _plugin_manager, x, y, file):
+		threading.Thread.__init__(self)
+		self._file_manager = _file_manager
+		self._logger = _logger
+		self._plugin_manager = _plugin_manager
+		self.x = x
+		self.y = y
+		self.file = file
+	def run(self):
+		self._logger.info("translate called, {}: ({}, {})".format(self.file, self.x, self.y))
+		self._plugin_manager.send_plugin_message("translatemodel", dict(state='started', file=self.file, x=self.x, y=self.y))
+
+		origPath = self._file_manager.path_on_disk(FileDestinations.LOCAL, self.file)
+
+		longPath = translate.translate(self.x, self.y, origPath)
+		shortPath = self._file_manager.path_in_storage(FileDestinations.LOCAL, longPath)
+		path, name = self._file_manager.canonicalize(FileDestinations.LOCAL, longPath)
+
+		newFO = octoprint.filemanager.util.DiskFileWrapper(name, longPath, move=True)
+		self._file_manager.add_file(FileDestinations.LOCAL, longPath, newFO, allow_overwrite=True)
+		self._logger.info("Done with file {}: ({}, {}); saved as {}".format(self.file, self.x, self.y, longPath))
+		self._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, x=self.x, y=self.y, path=shortPath))
+
+
 
 class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
                            octoprint.plugin.AssetPlugin,
@@ -66,19 +92,10 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 		if command == "test":
 			self._logger.info("test called".format())
 		elif command == "translate":
-			self._logger.info("translate called, {file}: ({x}, {y})".format(**data))
-
 			x = round(float(data['x']), 3)
 			y = round(float(data['y']), 3)
-
-			origPath = self._file_manager.path_on_disk(FileDestinations.LOCAL, data['file'])
-
-			longPath = translate.translate(x, y, origPath)
-			shortPath = self._file_manager.path_in_storage(FileDestinations.LOCAL, longPath)
-			path, name = self._file_manager.canonicalize(FileDestinations.LOCAL, longPath)
-
-			newFO = octoprint.filemanager.util.DiskFileWrapper(name, longPath, move=True)
-			self._file_manager.add_file(FileDestinations.LOCAL, longPath, newFO, allow_overwrite=True)
+			worker = TranslateWorker(self._file_manager, self._logger, self._plugin_manager, x, y, data['file'])
+			worker.start()
 
 
 __plugin_name__ = "Translate Model Plugin"
