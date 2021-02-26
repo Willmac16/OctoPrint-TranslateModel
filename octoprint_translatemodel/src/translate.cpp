@@ -8,6 +8,39 @@
 #include <string>
 #include <iostream>
 
+static char module_name[] = "octoprint.plugins.translatemodel-C++";
+static PyObject *logging_library = NULL;
+static PyObject *logging_object= NULL;
+static PyThreadState *_save;
+
+void info(std::string msg)
+{
+    Py_BLOCK_THREADS
+    PyObject *logging_message = Py_BuildValue("s", msg.c_str());
+    Py_XINCREF(logging_message);
+
+    std::cout << "Got past message build" << std::endl;
+
+    std::cout << "LO: " << logging_object << std::endl;
+    PyObject_CallMethod(logging_object, "info", "O", logging_message, NULL);
+    std::cout << "Got past CallMethod" << std::endl;
+
+
+    Py_DECREF(logging_message);
+    Py_UNBLOCK_THREADS
+}
+
+void debug(std::string msg)
+{
+    Py_BLOCK_THREADS
+    PyObject *logging_message = Py_BuildValue("s", msg.c_str());
+    Py_XINCREF(logging_message);
+    PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+
+    Py_DECREF(logging_message);
+    Py_UNBLOCK_THREADS
+}
+
 float roundTo(int percision, float in)
 {
     float out;
@@ -62,13 +95,15 @@ std::string translate(float xShift, float yShift, std::string inPath)
 
     std::ifstream infile(inPath);
 
+    info("Working on file " + op.str());
+
     std::string line;
     std::ofstream outfile(outPath.str());
 
     std::regex objStart("^; printing object !(ENDGCODE)");
     std::regex objEnd("^; stop printing object !(ENDGCODE)");
 
-    std::regex start(";AFTER_LAYER_CHANGE");
+    std::regex start(";(AFTER_LAYER_CHANGE|LAYER:0)");
     std::regex end("end");
 
     int inObj = -1;
@@ -77,7 +112,7 @@ std::string translate(float xShift, float yShift, std::string inPath)
 
     while (getline(infile, line))
     {
-        // std::cout << "line: " << line << std::endl;
+        debug(line);
 
         if (inObj == -1 && afterStart == -1)
         {
@@ -86,19 +121,19 @@ std::string translate(float xShift, float yShift, std::string inPath)
             else if (std::regex_match(line, start))
                 afterStart = true;
             outfile << line << std::endl;
+            debug("proc: -1 -1");
         }
         else if (inObj == 0)
         {
             if (std::regex_match(line, objStart))
                 inObj = true;
-            outfile << line << std::endl;
-
+            debug("proc: 0 *");
         }
         else if (afterStart == 0)
         {
             if (std::regex_match(line, start))
                 afterStart = true;
-            outfile << line << std::endl;
+            debug("proc: -1 0");
         }
         else
         {
@@ -162,7 +197,7 @@ std::string translate(float xShift, float yShift, std::string inPath)
                     if (comment != "")
                     {
                         outfile << " ; " << comment;
-                        std::cout << comment << std::endl;
+                        debug(comment);
                     }
                 }
             }
@@ -177,17 +212,6 @@ std::string translate(float xShift, float yShift, std::string inPath)
     return outPath.str();
 }
 
-
-// int main(int argc, char *argv[])
-// {
-//     if (argc > 4)
-//     {
-//         translate(std::stof(argv[1]), std::stof(argv[2]), (std::string) argv[3], (std::string) argv[4]);
-//     }
-//     else
-//         return 1;
-// }
-
 static PyObject *
 translate_translate(PyObject *self, PyObject *args)
 {
@@ -197,20 +221,31 @@ translate_translate(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "ffs", &xShift, &yShift, &path))
         return NULL;
     std::string opath;
-    Py_BEGIN_ALLOW_THREADS
+    Py_UNBLOCK_THREADS
     opath = translate(xShift, yShift, (std::string) path);
-    Py_END_ALLOW_THREADS
+    Py_BLOCK_THREADS
     return Py_BuildValue("s", opath.c_str());
 }
 
 static PyObject *
 translate_test(PyObject *self, PyObject *args)
 {
-    float xShift, yShift;
+    Py_UNBLOCK_THREADS
+    char *msg;
 
-    if (!PyArg_ParseTuple(args, "ff", &xShift, &yShift))
+    if (!PyArg_ParseTuple(args, "s", &msg))
+    {
         return NULL;
-    std::cout << roundTo(3, xShift) << " " << roundTo(3, yShift) << std::endl;
+    }
+
+    std::string out = "Hello ";
+
+    out += msg;
+
+
+    debug(out);
+
+    Py_BLOCK_THREADS
     Py_RETURN_NONE;
 }
 
@@ -235,5 +270,10 @@ static struct PyModuleDef translatemodule = {
 PyMODINIT_FUNC
 PyInit_translate(void)
 {
+    logging_library = PyImport_ImportModuleNoBlock("logging");
+    logging_object = PyObject_CallMethod(logging_library, "getLogger", "O", Py_BuildValue("s", module_name));
+    Py_XINCREF(logging_object);
+    std::cout << "LO: " << logging_object << std::endl;
+
     return PyModule_Create(&translatemodule);
 }

@@ -6,8 +6,9 @@ from octoprint.filemanager import FileDestinations
 
 import translate
 
-import re, threading
+import re, threading, time
 
+# Worker to translate models in a seperate thread
 class TranslateWorker(threading.Thread):
 	def __init__(self, _file_manager, _logger, _plugin_manager, x, y, file):
 		threading.Thread.__init__(self)
@@ -17,18 +18,26 @@ class TranslateWorker(threading.Thread):
 		self.x = x
 		self.y = y
 		self.file = file
+
 	def run(self):
+		# Let the log+frontend know that the file is being processed
 		self._logger.info("translate called, {}: ({}, {})".format(self.file, self.x, self.y))
 		self._plugin_manager.send_plugin_message("translatemodel", dict(state='started', file=self.file, x=self.x, y=self.y))
 
 		origPath = self._file_manager.path_on_disk(FileDestinations.LOCAL, self.file)
 
+		# runs the c++ file processing
 		longPath = translate.translate(float(self.x), float(self.y), origPath)
+
+		# work out the different forms of the path
 		shortPath = self._file_manager.path_in_storage(FileDestinations.LOCAL, longPath)
 		path, name = self._file_manager.canonicalize(FileDestinations.LOCAL, longPath)
 
+		# takes the file from c++ and adds it into octoprint
 		newFO = octoprint.filemanager.util.DiskFileWrapper(name, longPath, move=True)
 		self._file_manager.add_file(FileDestinations.LOCAL, longPath, newFO, allow_overwrite=True)
+
+		# Let the log+frontend know that the file is done
 		self._logger.info("Done with file {}: ({}, {}); saved as {}".format(self.file, self.x, self.y, shortPath))
 		self._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, x=self.x, y=self.y, path=shortPath))
 
@@ -42,8 +51,10 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 
 	##~~ StartupPlugin mixin
 
-	def on_startup(self, host, port):
+	def on_after_startup(self):
 		self.translating = []
+		self._logger.debug("ON AFTER STARTUP")
+		translate.test("ON AFTER STARTUP")
 
 	##~~ SettingsPlugin mixin
 
@@ -96,8 +107,9 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 
 	def on_api_command(self, command, data):
 		if command == "test":
-			self._logger.info("test called".format())
+			self._logger.info("test called")
 		elif command == "translate":
+
 			if octoprint.filemanager.valid_file_type(data['file'], type="gcode"):
 				index = data['file'] + data['x'] + data['y']
 

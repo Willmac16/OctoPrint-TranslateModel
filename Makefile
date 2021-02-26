@@ -2,6 +2,10 @@ run: install
 	octoprint serve
 	@echo "Run Called"
 
+test: install
+	python3 test.py
+	@echo "Test Called"
+
 install: .install
 
 .install: octoprint_translatemodel/src/translate.cpp setup.py

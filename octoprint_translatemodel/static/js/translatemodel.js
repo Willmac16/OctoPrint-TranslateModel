@@ -128,6 +128,10 @@ $(function() {
                 }
             }
         }
+
+        self.onDataUpdaterReconnect = function () {
+            self.notifies = {};
+        }
     }
 
     /* view model class, parameters for constructor, container to bind to
