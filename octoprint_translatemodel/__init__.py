@@ -26,8 +26,14 @@ class TranslateWorker(threading.Thread):
 
 		origPath = self._file_manager.path_on_disk(FileDestinations.LOCAL, self.file)
 
+		startTime = time.time()
 		# runs the c++ file processing
-		longPath = translate.translate(float(self.x), float(self.y), origPath)
+		longPath = translate.translate(float(self.x), float(self.y), origPath,
+					("^; printing object !(ENDGCODE)", "^; stop printing object !(ENDGCODE)",
+					";(AFTER_LAYER_CHANGE|LAYER:0)", "end"))
+		endTime = time.time()
+		procTime = endTime-startTime
+
 
 		# work out the different forms of the path
 		shortPath = self._file_manager.path_in_storage(FileDestinations.LOCAL, longPath)
@@ -38,8 +44,8 @@ class TranslateWorker(threading.Thread):
 		self._file_manager.add_file(FileDestinations.LOCAL, longPath, newFO, allow_overwrite=True)
 
 		# Let the log+frontend know that the file is done
-		self._logger.info("Done with file {}: ({}, {}); saved as {}".format(self.file, self.x, self.y, shortPath))
-		self._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, x=self.x, y=self.y, path=shortPath))
+		self._logger.info("Done with file {}: ({}, {}) took {}s; saved as {}".format(self.file, self.x, self.y, procTime, shortPath))
+		self._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, x=self.x, y=self.y, time=procTime, path=shortPath))
 
 
 

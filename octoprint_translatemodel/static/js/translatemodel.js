@@ -4,6 +4,17 @@
  * Author: Will MacCormack
  * License: AGPLv3
  */
+function roundTo(digits, number) {
+    for (let i=0; i<digits; i++) {
+        number *= 10;
+    }
+    out = Math.round(number)
+    for (let i=0; i<digits; i++) {
+        out /= 10;
+    }
+    return out;
+}
+
 $(function() {
     function TranslatemodelViewModel(parameters) {
         var self = this;
@@ -91,31 +102,29 @@ $(function() {
                     });
                 } else if (data.state === "running") {
                     let index = data.file + data.x + data.y;
+                    runnDict = {
+                        title: 'Running Translating Model',
+                        type: 'info',
+                        text: `Moving ${data.file} (${data.x}, ${data.y})`,
+                        hide: false
+                    }
+
                     if (index in self.notifies) {
-                        self.notifies[index].update({
-                            title: 'Running Translating Model'});
+                        self.notifies[index].update(runnDict);
                     } else {
-                        self.notifies[index] = new PNotify({
-                            title: 'Running Translating Model',
-                            type: 'info',
-                            text: `Moving ${data.file} (${data.x}, ${data.y})`,
-                            hide: false
-                        });
+                        self.notifies[index] = new PNotify(runnDict);
                     }
                 } else if (data.state === "finished") {
                     let index = data.file + data.x + data.y;
+                    finishDict = {
+                        title: 'Finished Translating Model',
+                        text: `${data.file} moved <br/> (${data.x}, ${data.y}) <br/> took ${roundTo(2, data.time)}s <br/> is available @ ${data.path}`}
+
                     if (index in self.notifies) {
-                        self.notifies[index].update({
-                            title: 'Finished Translating Model',
-                            text: `${data.file} moved <br/> (${data.x}, ${data.y}) <br/> is available @ ${data.path}`});
+                        self.notifies[index].update(finishDict);
                         delete self.notifies['index'];
                     } else {
-                        new PNotify({
-                            title: 'Finished Translating Model',
-                            type: 'info',
-                            text: `${data.file} moved <br/> (${data.x}, ${data.y}) <br/> is available @ ${data.path}`,
-                            hide: false
-                        });
+                        new PNotify(finishDict);
                     }
 
                 } else if (data.state === "invalid") {

@@ -8,28 +8,30 @@
 #include <string>
 #include <iostream>
 
+// Logging Vars
 static char module_name[] = "octoprint.plugins.translatemodel-C++";
 static PyObject *logging_library = NULL;
 static PyObject *logging_object= NULL;
+
+// Thread State Var
+// I use Py_UNBLOCK_THREADS and Py_BLOCK_THREADS instead of the begin/end pair
+// so that the code can block threading only for logging and still compile
 static PyThreadState *_save;
 
+// logging wrappers
+// self._logger.info
 void info(std::string msg)
 {
     Py_BLOCK_THREADS
     PyObject *logging_message = Py_BuildValue("s", msg.c_str());
     Py_XINCREF(logging_message);
-
-    std::cout << "Got past message build" << std::endl;
-
-    std::cout << "LO: " << logging_object << std::endl;
     PyObject_CallMethod(logging_object, "info", "O", logging_message, NULL);
-    std::cout << "Got past CallMethod" << std::endl;
-
 
     Py_DECREF(logging_message);
     Py_UNBLOCK_THREADS
 }
 
+// self._logger.debug
 void debug(std::string msg)
 {
     Py_BLOCK_THREADS
@@ -59,20 +61,35 @@ float roundTo(int percision, float in)
 
 float parseFloat(std::istream *stream)
 {
-    int n, pointCount = 0;
+    int n;
+    bool point = false, negative = false;
+
     std::string val = "";
-    while ((n = stream->peek()) && pointCount < 2)
+    while ((n = stream->peek()))
     {
-        // std::cout << (char) n << " pc: " << pointCount << std::endl;
         if (n > 47 && n <= 57)
         {
             val += stream->get();
         }
         else if (n == 46)
         {
-            pointCount++;
-            if (pointCount < 2)
+            if (!point)
+            {
                 val += stream->get();
+                point = true;
+            }
+            else
+                break;
+        }
+        else if (n == '-')
+        {
+            if (!negative)
+            {
+                val += stream->get();
+                negative = true;
+            }
+            else
+                break;
         }
         else
             break;
@@ -84,27 +101,31 @@ float parseFloat(std::istream *stream)
         return NAN;
 }
 
-std::string translate(float xShift, float yShift, std::string inPath)
+std::string translate(float xShift, float yShift, std::string inPath,
+                        std::string objStartRegex, std::string objStopRegex,
+                        std::string startRegex, std::string stopRegex)
 {
     std::ostringstream outPath;
     std::ostringstream op;
 
     op << ".translate_" << xShift << "_" << yShift << ".gcode";
-    std::regex r(".g(co)*(de)*");
+    std::regex r("\\.g(co)*(de)*");
     outPath << std::regex_replace(inPath, r, op.str());
 
     std::ifstream infile(inPath);
 
-    info("Working on file " + op.str());
+    // info("Working on file " + op.str());
 
     std::string line;
     std::ofstream outfile(outPath.str());
 
-    std::regex objStart("^; printing object !(ENDGCODE)");
-    std::regex objEnd("^; stop printing object !(ENDGCODE)");
+    std::regex objStart(objStartRegex);
+    std::regex objEnd(objStopRegex);
 
-    std::regex start(";(AFTER_LAYER_CHANGE|LAYER:0)");
-    std::regex end("end");
+    std::regex start(startRegex);
+    std::regex end(stopRegex);
+
+    bool absolute = true;
 
     int inObj = -1;
     int afterStart = -1;
@@ -112,7 +133,7 @@ std::string translate(float xShift, float yShift, std::string inPath)
 
     while (getline(infile, line))
     {
-        debug(line);
+        // debug(line);
 
         if (inObj == -1 && afterStart == -1)
         {
@@ -121,19 +142,19 @@ std::string translate(float xShift, float yShift, std::string inPath)
             else if (std::regex_match(line, start))
                 afterStart = true;
             outfile << line << std::endl;
-            debug("proc: -1 -1");
+            // debug("proc: -1 -1");
         }
         else if (inObj == 0)
         {
             if (std::regex_match(line, objStart))
                 inObj = true;
-            debug("proc: 0 *");
+            // debug("proc: 0 *");
         }
         else if (afterStart == 0)
         {
             if (std::regex_match(line, start))
                 afterStart = true;
-            debug("proc: -1 0");
+            // debug("proc: -1 0");
         }
         else
         {
@@ -146,58 +167,75 @@ std::string translate(float xShift, float yShift, std::string inPath)
             int num;
             if ((iss >> cmd) && toupper(cmd) == 'G')
             {
-                if ((iss >> num) && num >= 0 && num < 4)
+                if ((iss >> num))
                 {
-                    outfile << "G" << num;
-                    char arg;
-                    float pos;
-                    while ((iss >> arg) && arg != ';')
+                    if (num >= 0 && num < 4)
                     {
-                        if (arg == '(')
+                        outfile << "G" << num;
+                        char arg;
+                        float pos;
+                        while ((iss >> arg) && arg != ';')
                         {
-                            outfile << arg;
-                            std::cout << arg;
-                            do
+                            if (arg == '(')
                             {
-                                iss >> arg;
                                 outfile << arg;
                                 std::cout << arg;
-                            }
-                            while (arg != ')');
-                        }
-                        else
-                        {
-                            pos = parseFloat(&iss);
-                            if (!isnan(pos))
-                            {
-                                switch (toupper(arg))
+                                do
                                 {
-                                    case 'X':
-                                        outfile << " " << arg << roundTo(3, (pos+xShift));
-                                        break;
-                                    case 'Y':
-                                        outfile << " " << arg << roundTo(3, (pos+yShift));
-                                        break;
-                                    case 'E':
-                                        outfile << " " << arg << roundTo(5, pos);
-                                        break;
-                                    default:
-                                        outfile << " " << arg << roundTo(3, pos);
-                                        break;
+                                    iss >> arg;
+                                    outfile << arg;
+                                    std::cout << arg;
                                 }
+                                while (arg != ')');
                             }
-                            else
-                                outfile << " " << arg;
+                            else if (toupper(arg) > 'A' && toupper(arg) <= 'Z')
+                            {
+                                pos = parseFloat(&iss);
+                                if (!isnan(pos))
+                                {
+                                    switch (toupper(arg))
+                                    {
+                                        case 'X':
+                                            if (absolute)
+                                                outfile << " " << arg << roundTo(3, (pos+xShift));
+                                            else
+                                                outfile << " " << arg << roundTo(3, pos);
+                                            break;
+                                        case 'Y':
+                                            if (absolute)
+                                                outfile << " " << arg << roundTo(3, (pos+yShift));
+                                            else
+                                                outfile << " " << arg << roundTo(3, pos);
+                                            break;
+                                        case 'E':
+                                            outfile << " " << arg << roundTo(5, pos);
+                                            break;
+                                        default:
+                                            outfile << " " << arg << roundTo(3, pos);
+                                            break;
+                                    }
+                                }
+                                else
+                                    outfile << " " << arg;
+                            }
+                        }
+
+                        std::string comment;
+                        std::getline(iss, comment);
+
+                        if (comment != "")
+                        {
+                            outfile << " ; " << comment;
+                            // debug(comment);
                         }
                     }
-
-                    std::string comment;
-                    std::getline(iss, comment);
-
-                    if (comment != "")
+                    else if (num == 91)
                     {
-                        outfile << " ; " << comment;
-                        debug(comment);
+                        absolute = false;
+                    }
+                    else if (num == 90)
+                    {
+                        absolute = true;
                     }
                 }
             }
@@ -216,13 +254,16 @@ static PyObject *
 translate_translate(PyObject *self, PyObject *args)
 {
     float xShift, yShift;
-    const char *path;
+    const char *path, *osr, *oer, *sr, *er;
 
-    if (!PyArg_ParseTuple(args, "ffs", &xShift, &yShift, &path))
+    if (!PyArg_ParseTuple(args, "ffs(ssss)", &xShift, &yShift, &path,
+                                            &osr, &oer, &sr, &er))
         return NULL;
     std::string opath;
     Py_UNBLOCK_THREADS
-    opath = translate(xShift, yShift, (std::string) path);
+    opath = translate(xShift, yShift, (std::string) path,
+                        (std::string) osr, (std::string) oer,
+                        (std::string) sr, (std::string) er);
     Py_BLOCK_THREADS
     return Py_BuildValue("s", opath.c_str());
 }
