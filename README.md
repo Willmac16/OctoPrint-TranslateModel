@@ -1,6 +1,9 @@
 # OctoPrint-TranslateModel
 
-**TODO:** Describe what your plugin does.
+Translate Model allows you to move models around in gcode files without reslicing.
+
+## Features
+* Quick and easy model movement along the x and y axes
 
 ## Setup
 
@@ -9,8 +12,7 @@ or manually using this URL:
 
     https://github.com/Willmac16/OctoPrint-TranslateModel/archive/main.zip
 
-**TODO:** Describe how to install your plugin, if more needs to be done than just installing it via pip or through
-the plugin manager.
+* This plugin will compile its C++ code on install, but this should be pretty quick.
 
 ## Configuration
 
