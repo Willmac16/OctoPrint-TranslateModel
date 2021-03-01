@@ -179,12 +179,12 @@ std::string translate(float xShift, float yShift, std::string inPath,
                             if (arg == '(')
                             {
                                 outfile << arg;
-                                std::cout << arg;
+                                // std::cout << arg;
                                 do
                                 {
                                     iss >> arg;
                                     outfile << arg;
-                                    std::cout << arg;
+                                    // std::cout << arg;
                                 }
                                 while (arg != ')');
                             }
@@ -314,7 +314,6 @@ PyInit_translate(void)
     logging_library = PyImport_ImportModuleNoBlock("logging");
     logging_object = PyObject_CallMethod(logging_library, "getLogger", "O", Py_BuildValue("s", module_name));
     Py_XINCREF(logging_object);
-    std::cout << "LO: " << logging_object << std::endl;
 
     return PyModule_Create(&translatemodule);
 }

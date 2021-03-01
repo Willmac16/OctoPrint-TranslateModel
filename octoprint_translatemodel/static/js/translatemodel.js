@@ -26,46 +26,29 @@ $(function() {
 
         self.xShift = ko.observable(0.0);
         self.yShift = ko.observable(0.0);
-        self.translateFile = ko.observable();
+        self.translateFile = ko.observable("");
+        self.afterTranslate = ko.observable("nothing");
 
         self.fileHide = /.translate_/;
 
         self.notifies = {};
 
-        self.onUserLoggedIn = function () {
-            self.updateFiles();
-        }
+        self.filesViewModel.translateSelect = function (data) {
+            window.location = "#tab_plugin_translatemodel";
+            self.translateFile(data.path);
+        };
 
-        self.updateFiles = function() {
-            if (self.loginState.hasPermission(self.access.permissions.FILES_LIST)) {
-                console.log("Updating Files");
-                var recursiveFileListing = function(entry) {
-                    if (entry.type == "folder") {
-                        _.each(entry.children, function(child) {
-                            recursiveFileListing(child);
-                        });
-                    } else {
-                        if (!entry.name.match(self.fileHide)) {
-                            var file = $("<option></option>").text(entry.name).attr('value', entry.path);
-                            $("#translate_table").append(file);
-                        }
-                    }
-                };
+        $(document).ready(function() {
+            let regex = /<div class="btn-group action-buttons">([\s\S]*)<.div>/mi;
+            let template = '<div class="btn btn-mini" data-bind="click: function() { if ($root.loginState.isUser()) { $root.translateSelect($data) } else { return; } }, css: {disabled: !$root.loginState.isUser()}" title="Translate Model"><i class="fa fa-arrows-alt"></i></div>';
 
-                OctoPrint.files.list(true)
-                .done(function(response) {
-                    $("#translate_table").html("<option value=\"\" disabled selected>Select a File</option>");
-                    _.each(response.files, function(entry) {
-                        recursiveFileListing(entry);
-                    });
-                });
-            } else {
-                $("#translate_table").text("");
-            }
-        }
+            $("#files_template_machinecode").text(function () {
+                return $(this).text().replace(regex, '<div class="btn-group action-buttons">$1	' + template + '></div>');
+            });
+        });
 
         self.translate = function() {
-            if (self.translateFile()) {
+            if (self.translateFile() != "") {
                 let index = self.translateFile() + parseFloat(self.xShift()).toFixed(3) + parseFloat(self.yShift()).toFixed(3);
                 if (!(index in self.notifies)) {
                     $.ajax({
@@ -76,7 +59,8 @@ $(function() {
                             command: "translate",
                             x: parseFloat(self.xShift()).toFixed(3),
                             y: parseFloat(self.yShift()).toFixed(3),
-                            file: self.translateFile()
+                            file: self.translateFile(),
+                            at: self.afterTranslate()
                         }),
                         contentType: "application/json; charset=UTF-8"
                     });
@@ -86,7 +70,7 @@ $(function() {
                     console.log("File already translating");
                 }
             } else {
-                console.log("Select a file");
+                console.log("select a file");
             }
         }
 
@@ -116,9 +100,20 @@ $(function() {
                     }
                 } else if (data.state === "finished") {
                     let index = data.file + data.x + data.y;
+
+                    if (data.afterTranslate === "load")
+                        lastText += `is loaded and ready to print`;
+                    else if (data.afterTranslate === "print")
+                        lastText += `is printing`;
+                    else if (data.afterTranslate === "printAndDelete")
+                        lastText += `is printing and will delete once complete`;
+                    else
+                        lastText += `is available @ ${data.path}`;
+
                     finishDict = {
+                        type: 'success',
                         title: 'Finished Translating Model',
-                        text: `${data.file} moved <br/> (${data.x}, ${data.y}) <br/> took ${roundTo(2, data.time)}s <br/> is available @ ${data.path}`}
+                        text: `${data.file} moved <br/> (${data.x}, ${data.y}) <br/> took ${roundTo(2, data.time)}s ${lastText}`}
 
                     if (index in self.notifies) {
                         self.notifies[index].update(finishDict);
