@@ -30,7 +30,7 @@ class TranslateWorker(threading.Thread):
 		# runs the c++ file processing
 		longPath = translate.translate(float(self.x), float(self.y), origPath,
 					("^; printing object !(ENDGCODE)", "^; stop printing object !(ENDGCODE)",
-					";(AFTER_LAYER_CHANGE|LAYER:0)", "end"))
+					";(AFTER_LAYER_CHANGE|LAYER:0| layer 0)", "end"))
 		endTime = time.time()
 		procTime = endTime-startTime
 
@@ -83,9 +83,7 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 		# Define your plugin's asset files to automatically include in the
 		# core UI here.
 		return dict(
-			js=["js/translatemodel.js"],
-			css=["css/translatemodel.css"],
-			less=["less/translatemodel.less"]
+			js=["js/translatemodel.js"]
 		)
 
 	##~~ Softwareupdate hook
