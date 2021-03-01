@@ -101,6 +101,7 @@ $(function() {
                 } else if (data.state === "finished") {
                     let index = data.file + data.x + data.y;
 
+                    let lastText = "<br> ";
                     if (data.afterTranslate === "load")
                         lastText += `is loaded and ready to print`;
                     else if (data.afterTranslate === "print")
