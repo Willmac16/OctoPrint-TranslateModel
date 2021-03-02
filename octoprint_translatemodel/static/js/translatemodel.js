@@ -76,7 +76,9 @@ $(function() {
 
         self.onDataUpdaterPluginMessage = function(plugin, data) {
             if (plugin === "translatemodel") {
-                if (data.state === "started") {
+                if (data.state === "selected") {
+                    self.translateFile(data.file)
+                } else if (data.state === "started") {
                     let index = data.file + data.x + data.y;
                     self.notifies[index] = new PNotify({
                         title: 'Started Translating Model',

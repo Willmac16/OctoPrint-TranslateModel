@@ -5,6 +5,8 @@ import octoprint.plugin
 from octoprint.filemanager import FileDestinations
 from octoprint.access.permissions import Permissions
 
+from octoprint.events import Events
+
 import translate
 
 import re, threading, time
@@ -58,7 +60,8 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
                            octoprint.plugin.AssetPlugin,
                            octoprint.plugin.TemplatePlugin,
 						   octoprint.plugin.SimpleApiPlugin,
-						   octoprint.plugin.StartupPlugin):
+						   octoprint.plugin.StartupPlugin,
+						   octoprint.plugin.EventHandlerPlugin):
 
 	translating = []
 	delete_files = []
@@ -138,10 +141,15 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 	##~~EventHandlerPlugin mixin
 
 	def on_event(self, event, payload):
-		if event in ("PrintFailed", "PrintDone", "PrintCancelled") and payload['origin'] == "local":
+		if event in ("PrintFailed", "PrintDone", "PrintCanceled") and payload['origin'] == "local":
 			if payload['path'] in self.delete_files:
+				self._logger.info("Deleting {} after print end".format(payload['path']))
 				self._file_manager.remove_file(FileDestinations.LOCAL, payload['path'])
 				self.delete_files.remove(payload['path'])
+				self._printer.unselect_file()
+		elif event == "FileSelected" and payload['origin'] == "local":
+			self._plugin_manager.send_plugin_message("translatemodel", dict(state='selected', file=payload['path']))
+
 
 
 __plugin_name__ = "Translate Model Plugin"
