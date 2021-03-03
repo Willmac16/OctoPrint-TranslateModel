@@ -11,3 +11,4 @@ dist
 .install
 *.so
 test.py
+/testfiles/

@@ -119,6 +119,8 @@ std::string translate(float xShift, float yShift, std::string inPath,
     std::string line;
     std::ofstream outfile(outPath.str());
 
+    outfile << "; Processed by OctoPrint-TranslateModel" << std::endl << std::endl;
+
     std::regex objStart(objStartRegex);
     std::regex objEnd(objStopRegex);
 
@@ -133,117 +135,132 @@ std::string translate(float xShift, float yShift, std::string inPath,
 
     while (getline(infile, line))
     {
-        // debug(line);
+        // Remove \r if file was CTLF
+        if (!line.empty() && line[line.size()-1] == '\r')
+            line.erase(line.size()-1);
 
-        if (inObj == -1 && afterStart == -1)
+        if (inObj == -1 && afterStart != 1)
         {
             if (std::regex_match(line, objStart))
+            {
                 inObj = true;
+                outfile << line << ";TRANSLATE-MODEL_OBJECT-START" << std::endl;
+            }
             else if (std::regex_match(line, start))
+            {
                 afterStart = true;
-            outfile << line << std::endl;
-            // debug("proc: -1 -1");
+                outfile << line << ";TRANSLATE-MODEL_LAYER-START" << std::endl;
+            }
+            else
+            {
+                outfile << line << std::endl;
+            }
         }
         else if (inObj == 0)
         {
             if (std::regex_match(line, objStart))
+            {
                 inObj = true;
-            // debug("proc: 0 *");
-        }
-        else if (afterStart == 0)
-        {
-            if (std::regex_match(line, start))
-                afterStart = true;
-            // debug("proc: -1 0");
+                outfile << line << ";TRANSLATE-MODEL_OBJECT-START" << std::endl;
+            }
         }
         else
         {
             if (std::regex_match(line, objEnd))
-                inObj = false;
-            else if (std::regex_match(line, end))
-                afterStart = false;
-            std::istringstream iss(line);
-            char cmd;
-            int num;
-            if ((iss >> cmd) && toupper(cmd) == 'G')
             {
-                if ((iss >> num))
-                {
-                    if (num >= 0 && num < 4)
-                    {
-                        outfile << "G" << num;
-                        char arg;
-                        float pos;
-                        while ((iss >> arg) && arg != ';')
-                        {
-                            if (arg == '(')
-                            {
-                                outfile << arg;
-                                // std::cout << arg;
-                                do
-                                {
-                                    iss >> arg;
-                                    outfile << arg;
-                                    // std::cout << arg;
-                                }
-                                while (arg != ')');
-                            }
-                            else if (toupper(arg) > 'A' && toupper(arg) <= 'Z')
-                            {
-                                pos = parseFloat(&iss);
-                                if (!isnan(pos))
-                                {
-                                    switch (toupper(arg))
-                                    {
-                                        case 'X':
-                                            if (absolute)
-                                                outfile << " " << arg << roundTo(3, (pos+xShift));
-                                            else
-                                                outfile << " " << arg << roundTo(3, pos);
-                                            break;
-                                        case 'Y':
-                                            if (absolute)
-                                                outfile << " " << arg << roundTo(3, (pos+yShift));
-                                            else
-                                                outfile << " " << arg << roundTo(3, pos);
-                                            break;
-                                        case 'E':
-                                            outfile << " " << arg << roundTo(5, pos);
-                                            break;
-                                        default:
-                                            outfile << " " << arg << roundTo(3, pos);
-                                            break;
-                                    }
-                                }
-                                else
-                                    outfile << " " << arg;
-                            }
-                        }
-
-                        std::string comment;
-                        std::getline(iss, comment);
-
-                        if (comment != "")
-                        {
-                            outfile << " ; " << comment;
-                            // debug(comment);
-                        }
-                    }
-                    else if (num == 91)
-                    {
-                        absolute = false;
-                    }
-                    else if (num == 90)
-                    {
-                        absolute = true;
-                    }
-                }
+                inObj = false;
+                outfile << line << ";TRANSLATE-MODEL_OBJECT-STOP" << std::endl;
+            }
+            else if (std::regex_match(line, end))
+            {
+                afterStart = false;
+                outfile << line << ";TRANSLATE-MODEL_END-STOP" << std::endl;
             }
             else
             {
-                outfile << line;
+                std::istringstream iss(line);
+                char cmd;
+                int num;
+                if ((iss >> cmd) && toupper(cmd) == 'G')
+                {
+                    if ((iss >> num))
+                    {
+                        if (num >= 0 && num < 4)
+                        {
+                            outfile << "G" << num;
+                            char arg;
+                            float pos;
+                            while ((iss >> arg) && arg != ';')
+                            {
+                                if (arg == '(')
+                                {
+                                    outfile << arg;
+                                    // std::cout << arg;
+                                    do
+                                    {
+                                        iss >> arg;
+                                        outfile << arg;
+                                        // std::cout << arg;
+                                    }
+                                    while (arg != ')');
+                                }
+                                else if (toupper(arg) > 'A' && toupper(arg) <= 'Z')
+                                {
+                                    pos = parseFloat(&iss);
+                                    if (!isnan(pos))
+                                    {
+                                        switch (toupper(arg))
+                                        {
+                                            case 'X':
+                                                if (absolute)
+                                                    outfile << " " << arg << roundTo(3, (pos+xShift));
+                                                else
+                                                    outfile << " " << arg << roundTo(3, pos);
+                                                break;
+                                            case 'Y':
+                                                if (absolute)
+                                                    outfile << " " << arg << roundTo(3, (pos+yShift));
+                                                else
+                                                    outfile << " " << arg << roundTo(3, pos);
+                                                break;
+                                            case 'E':
+                                                outfile << " " << arg << roundTo(5, pos);
+                                                break;
+                                            default:
+                                                outfile << " " << arg << roundTo(3, pos);
+                                                break;
+                                        }
+                                    }
+                                    else
+                                        outfile << " " << arg;
+                                }
+                            }
+
+                            std::string comment;
+                            std::getline(iss, comment);
+
+                            if (comment != "")
+                            {
+                                outfile << " ; " << comment;
+                                // debug(comment);
+                            }
+                        }
+                        else if (num == 91)
+                        {
+                            absolute = false;
+                        }
+                        else if (num == 90)
+                        {
+                            absolute = true;
+                        }
+                    }
+                }
+                else
+                {
+                    outfile << line;
+                }
+                outfile << std::endl;
             }
-            outfile << std::endl;
         }
     }
 

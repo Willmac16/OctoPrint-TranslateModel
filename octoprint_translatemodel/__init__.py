@@ -30,9 +30,10 @@ class TranslateWorker(threading.Thread):
 
 		startTime = time.time()
 		# runs the c++ file processing
-		longPath = translate.translate(float(self.x), float(self.y), origPath,
-					("^; printing object !(ENDGCODE)", "^; stop printing object !(ENDGCODE)",
-					";(AFTER_LAYER_CHANGE|LAYER:0| layer 0)", "end"))
+		regexTuple = ("^; printing object !(ENDGCODE)", "^; stop printing object !(ENDGCODE)",
+						"^;(( BEGIN_|AFTER_)*LAYER_(CHANGE|OBJECT)|LAYER:[0-9]+| [<]*layer [0-9]+[>,]*)", "end")
+		longPath = translate.translate(float(self.x), float(self.y), origPath, regexTuple)
+
 		endTime = time.time()
 		procTime = endTime-startTime
 
@@ -48,6 +49,9 @@ class TranslateWorker(threading.Thread):
 		# Let the log+frontend know that the file is done
 		self._plugin._logger.info("Done with file {}: ({}, {}) took {}s; saved as {}".format(self.file, self.x, self.y, procTime, shortPath))
 		self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, x=self.x, y=self.y, time=procTime, path=shortPath, afterTranslate=self.after_translate))
+
+		index = self.file + self.x + self.y
+		self._plugin.translating.remove(index)
 
 		# load and print the file as necessary
 		if self.after_translate in ("load", "print", "printAndDelete"):
@@ -124,6 +128,7 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 		if command == "test":
 			self._logger.info("test called")
 		elif command == "translate":
+			# TODO: handle double translating (i.e. translating a translated file) better
 			if Permissions.FILES_UPLOAD.can() and octoprint.filemanager.valid_file_type(data['file'], type="gcode"):
 				index = data['file'] + data['x'] + data['y']
 
@@ -154,7 +159,7 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 
 __plugin_name__ = "Translate Model Plugin"
 
-__plugin_pythoncompat__ = ">=2.7,<4" # python 2 and 3
+__plugin_pythoncompat__ = ">=3,<4" # python 2 and 3
 
 def __plugin_load__():
 	global __plugin_implementation__
