@@ -31,7 +31,7 @@ class TranslateWorker(threading.Thread):
 		startTime = time.time()
 		# runs the c++ file processing
 		regexTuple = ("^; printing object !(ENDGCODE)", "^; stop printing object !(ENDGCODE)",
-						"^;(( BEGIN_|AFTER_)*LAYER_(CHANGE|OBJECT)|LAYER:[0-9]+| [<]*layer [0-9]+[>,]*)", "end")
+						"^;(( BEGIN_|AFTER_)*LAYER_(CHANGE|OBJECT)|LAYER:[0-9]+| [<]{0,1}layer [0-9]+[>,]{0,1}).*$", "(end|disable)")
 		longPath = translate.translate(float(self.x), float(self.y), origPath, regexTuple)
 
 		endTime = time.time()

@@ -119,8 +119,6 @@ std::string translate(float xShift, float yShift, std::string inPath,
     std::string line;
     std::ofstream outfile(outPath.str());
 
-    outfile << "; Processed by OctoPrint-TranslateModel" << std::endl << std::endl;
-
     std::regex objStart(objStartRegex);
     std::regex objEnd(objStopRegex);
 
@@ -133,27 +131,40 @@ std::string translate(float xShift, float yShift, std::string inPath,
     int afterStart = -1;
 
 
-    while (getline(infile, line))
+    std::string lineEnd = "\n";
+
+    getline(infile, line);
+
+    if (!line.empty() && line[line.size()-1] == '\r')
+    {
+        lineEnd = "\r\n";
+    }
+
+    outfile << "; Processed by OctoPrint-TranslateModel" << lineEnd << lineEnd;
+
+    do
     {
         // Remove \r if file was CTLF
         if (!line.empty() && line[line.size()-1] == '\r')
+        {
             line.erase(line.size()-1);
+        }
 
         if (inObj == -1 && afterStart != 1)
         {
             if (std::regex_match(line, objStart))
             {
                 inObj = true;
-                outfile << line << ";TRANSLATE-MODEL_OBJECT-START" << std::endl;
+                outfile << line << lineEnd << ";TRANSLATE-MODEL_OBJECT-START" << lineEnd;
             }
             else if (std::regex_match(line, start))
             {
                 afterStart = true;
-                outfile << line << ";TRANSLATE-MODEL_LAYER-START" << std::endl;
+                outfile << line << lineEnd << ";TRANSLATE-MODEL_LAYER-START" << lineEnd;
             }
             else
             {
-                outfile << line << std::endl;
+                outfile << line << lineEnd;
             }
         }
         else if (inObj == 0)
@@ -161,7 +172,7 @@ std::string translate(float xShift, float yShift, std::string inPath,
             if (std::regex_match(line, objStart))
             {
                 inObj = true;
-                outfile << line << ";TRANSLATE-MODEL_OBJECT-START" << std::endl;
+                outfile << line << lineEnd << ";TRANSLATE-MODEL_OBJECT-START" << lineEnd;
             }
         }
         else
@@ -169,12 +180,12 @@ std::string translate(float xShift, float yShift, std::string inPath,
             if (std::regex_match(line, objEnd))
             {
                 inObj = false;
-                outfile << line << ";TRANSLATE-MODEL_OBJECT-STOP" << std::endl;
+                outfile << line << lineEnd << ";TRANSLATE-MODEL_OBJECT-STOP" << lineEnd;
             }
             else if (std::regex_match(line, end))
             {
                 afterStart = false;
-                outfile << line << ";TRANSLATE-MODEL_END-STOP" << std::endl;
+                outfile << line << lineEnd << ";TRANSLATE-MODEL_END-STOP" << lineEnd;
             }
             else
             {
@@ -259,10 +270,11 @@ std::string translate(float xShift, float yShift, std::string inPath,
                 {
                     outfile << line;
                 }
-                outfile << std::endl;
+                outfile << lineEnd;
             }
         }
     }
+    while (getline(infile, line));
 
     return outPath.str();
 }
