@@ -34,8 +34,9 @@ $(function() {
         self.notifies = {};
 
         self.filesViewModel.translateSelect = function (data) {
-            window.location = "#tab_plugin_translatemodel";
+            console.log(`translate clicked for ${data.path}`);
             self.translateFile(data.path);
+            window.location = "#tab_plugin_translatemodel";
         };
 
         $(document).ready(function() {

@@ -32,7 +32,7 @@ class TranslateWorker(threading.Thread):
 		# runs the c++ file processing
 		regexTuple = ("^; printing object !(ENDGCODE)", "^; stop printing object !(ENDGCODE)",
 						"^;(( BEGIN_|AFTER_)*LAYER_(CHANGE|OBJECT)|LAYER:[0-9]+| [<]{0,1}layer [0-9]+[>,]{0,1}).*$", "(end|disable)")
-		longPath = translate.translate(float(self.x), float(self.y), origPath, regexTuple)
+		longPath = translate.translate(float(self.x), float(self.y), origPath, regexTuple, self._plugin._plugin_version)
 
 		endTime = time.time()
 		procTime = endTime-startTime
@@ -69,6 +69,7 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 
 	translating = []
 	delete_files = []
+	selected_file = ""
 
 
 	##~~ StartupPlugin mixin
@@ -153,7 +154,14 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 				self.delete_files.remove(payload['path'])
 				self._printer.unselect_file()
 		elif event == "FileSelected" and payload['origin'] == "local":
+			self.selected_file = payload['path']
 			self._plugin_manager.send_plugin_message("translatemodel", dict(state='selected', file=payload['path']))
+		elif event == "FileDeselected":
+			self.selected_file = ""
+			self._plugin_manager.send_plugin_message("translatemodel", dict(state='selected', file=""))
+		elif event == "ClientAuthed":
+			if self.selected_file != "":
+				self._plugin_manager.send_plugin_message("translatemodel", dict(state='selected', file=self.selected_file))
 
 
 

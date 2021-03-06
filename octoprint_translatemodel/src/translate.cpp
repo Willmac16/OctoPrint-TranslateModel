@@ -103,7 +103,7 @@ float parseFloat(std::istream *stream)
 
 std::string translate(float xShift, float yShift, std::string inPath,
                         std::string objStartRegex, std::string objStopRegex,
-                        std::string startRegex, std::string stopRegex)
+                        std::string startRegex, std::string stopRegex, std::string version)
 {
     std::ostringstream outPath;
     std::ostringstream op;
@@ -140,7 +140,7 @@ std::string translate(float xShift, float yShift, std::string inPath,
         lineEnd = "\r\n";
     }
 
-    outfile << "; Processed by OctoPrint-TranslateModel" << lineEnd << lineEnd;
+    outfile << "; Processed by OctoPrint-TranslateModel " << version << lineEnd << lineEnd;
 
     do
     {
@@ -259,10 +259,16 @@ std::string translate(float xShift, float yShift, std::string inPath,
                         else if (num == 91)
                         {
                             absolute = false;
+                            outfile << line;
                         }
                         else if (num == 90)
                         {
                             absolute = true;
+                            outfile << line;
+                        }
+                        else
+                        {
+                            outfile << line;
                         }
                     }
                 }
@@ -283,16 +289,17 @@ static PyObject *
 translate_translate(PyObject *self, PyObject *args)
 {
     float xShift, yShift;
-    const char *path, *osr, *oer, *sr, *er;
+    const char *path, *osr, *oer, *sr, *er, *ver;
 
-    if (!PyArg_ParseTuple(args, "ffs(ssss)", &xShift, &yShift, &path,
-                                            &osr, &oer, &sr, &er))
+    if (!PyArg_ParseTuple(args, "ffs(ssss)s", &xShift, &yShift, &path,
+                                                &osr, &oer, &sr, &er,
+                                                                &ver))
         return NULL;
     std::string opath;
     Py_UNBLOCK_THREADS
     opath = translate(xShift, yShift, (std::string) path,
                         (std::string) osr, (std::string) oer,
-                        (std::string) sr, (std::string) er);
+                        (std::string) sr, (std::string) er, (std::string) ver);
     Py_BLOCK_THREADS
     return Py_BuildValue("s", opath.c_str());
 }
