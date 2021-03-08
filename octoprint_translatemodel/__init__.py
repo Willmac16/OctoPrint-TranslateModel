@@ -133,9 +133,24 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 			if Permissions.FILES_UPLOAD.can() and octoprint.filemanager.valid_file_type(data['file'], type="gcode"):
 				index = data['file'] + data['x'] + data['y']
 
+				at = ""
 				if (index not in self.translating):
 					self.translating.append(index)
-					worker = TranslateWorker(self, data['x'], data['y'], data['file'], data['at'])
+					if data['at'] == "load":
+						if Permissions.FILES_SELECT.can():
+							at = data['at']
+
+					if data['at'] == "print" or data['at'] == "printAndDelete":
+						if Permissions.FILES_SELECT.can():
+							if Permissions.PRINT.can():
+								at = data['at']
+							else:
+								at = "load"
+						else:
+							at = "nothing"
+
+
+					worker = TranslateWorker(self, data['x'], data['y'], data['file'], at)
 					worker.start()
 				else:
 					self._plugin_manager.send_plugin_message("translatemodel", dict(state='running', file=data['file'], x=data['x'], y=data['y']))
