@@ -34,14 +34,13 @@ $(function() {
         self.notifies = {};
 
         self.filesViewModel.translateSelect = function (data) {
-            console.log(`translate clicked for ${data.path}`);
+            // console.log("Translating file "+ data.path);
             self.translateFile(data.path);
-            window.location = "#tab_plugin_translatemodel";
         };
 
         $(document).ready(function() {
             let regex = /<div class="btn-group action-buttons">([\s\S]*)<.div>/mi;
-            let template = '<div class="btn btn-mini" data-bind="click: function() { if ($root.loginState.isUser()) { $root.translateSelect($data) } else { return; } }, css: {disabled: !$root.loginState.isUser()}" title="Translate Model"><i class="fa fa-arrows-alt"></i></div>';
+            let template = '<div class="btn btn-mini" data-bind="click: function() { if ($root.loginState.isUser()) { $root.translateSelect($data) } else { return; } }, css: {disabled: !$root.loginState.isUser()}" href="#translate-model-modal" data-toggle="modal" title="Translate Model"><i class="fa fa-arrows-alt"></i></div>';
 
             $("#files_template_machinecode").text(function () {
                 return $(this).text().replace(regex, '<div class="btn-group action-buttons">$1	' + template + '></div>');
@@ -121,7 +120,7 @@ $(function() {
 
                     if (index in self.notifies) {
                         self.notifies[index].update(finishDict);
-                        delete self.notifies['index'];
+                        delete self.notifies[index];
                     } else {
                         new PNotify(finishDict);
                     }
@@ -149,6 +148,6 @@ $(function() {
     OCTOPRINT_VIEWMODELS.push({
         construct: TranslatemodelViewModel,
         dependencies: [ "loginStateViewModel", "settingsViewModel", "filesViewModel", "accessViewModel" ],
-        elements: [ "#tab_plugin_translatemodel" ]
+        elements: [ "#settings_plugin_translatemodel" ]
     });
 });
