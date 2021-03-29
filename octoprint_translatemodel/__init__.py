@@ -13,30 +13,30 @@ import re, threading, time
 
 # Worker to translate models in a seperate thread
 class TranslateWorker(threading.Thread):
-	def __init__(self, _plugin, x, y, file, after_translate):
+	def __init__(self, _plugin, shifts, file, after_translate, regexTuple, index):
 		threading.Thread.__init__(self)
 		self._plugin = _plugin
-		self.x = x
-		self.y = y
+		self.shifts = shifts
 		self.file = file
 		self.after_translate = after_translate
+		self.regexTuple = regexTuple
+		self.index = index
 
 	def run(self):
 		# Let the log+frontend know that the file is being processed
-		self._plugin._logger.info("translate called, {}: ({}, {})".format(self.file, self.x, self.y))
-		self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='started', file=self.file, x=self.x, y=self.y))
+		self._plugin._logger.info("translate called, {})".format(self.file))
+		self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='started', file=self.file, shifts=self.shifts, index=self.index))
 
 		origPath = self._plugin._file_manager.path_on_disk(FileDestinations.LOCAL, self.file)
 
 		startTime = time.time()
 		# runs the c++ file processing
-		regexTuple = ("^; printing object !(ENDGCODE)", "^; stop printing object !(ENDGCODE)",
-						"^;(( BEGIN_|AFTER_)*LAYER_(CHANGE|OBJECT)|LAYER:[0-9]+| [<]{0,1}layer [0-9]+[>,]{0,1}).*$", "(end|disable)")
-		longPath = translate.translate(float(self.x), float(self.y), origPath, regexTuple, self._plugin._plugin_version)
+		longPath = translate.translate(self.shifts, origPath, self.regexTuple, self._plugin._plugin_version)
 
 		endTime = time.time()
 		procTime = endTime-startTime
 
+		self._plugin._logger.debug(longPath)
 
 		# work out the different forms of the path
 		shortPath = self._plugin._file_manager.path_in_storage(FileDestinations.LOCAL, longPath)
@@ -47,11 +47,10 @@ class TranslateWorker(threading.Thread):
 		self._plugin._file_manager.add_file(FileDestinations.LOCAL, longPath, newFO, allow_overwrite=True)
 
 		# Let the log+frontend know that the file is done
-		self._plugin._logger.info("Done with file {}: ({}, {}) took {}s; saved as {}".format(self.file, self.x, self.y, procTime, shortPath))
-		self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, x=self.x, y=self.y, time=procTime, path=shortPath, afterTranslate=self.after_translate))
+		self._plugin._logger.info("Done with file {}: took {}s; saved as {}".format(self.file, procTime, shortPath))
+		self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, time=procTime, path=shortPath, afterTranslate=self.after_translate))
 
-		index = self.file + self.x + self.y
-		self._plugin.translating.remove(index)
+		self._plugin.translating.remove(self.index)
 
 		# load and print the file as necessary
 		if self.after_translate in ("load", "print", "printAndDelete"):
@@ -69,7 +68,6 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 
 	translating = []
 	delete_files = []
-	selected_file = ""
 
 
 	##~~ StartupPlugin mixin
@@ -83,6 +81,8 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 	def get_settings_defaults(self):
 		return dict(
 			# put your plugin's default settings here
+			layerStartRegex="^;(( BEGIN_|AFTER_)*LAYER_(CHANGE|OBJECT)|LAYER:[0-9]+| [<]{0,1}layer [0-9]+[>,]{0,1}).*$",
+			stopRegex="(end|disable)"
 		)
 
 	##~~ AssetPlugin mixin
@@ -121,7 +121,7 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 
 	def get_api_commands(self):
 		return dict(
-			translate=["file", 'x', 'y', 'at'],
+			translate=["file", "shifts", 'at', 'index'],
 			test=[]
 		)
 
@@ -129,9 +129,10 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 		if command == "test":
 			self._logger.info("test called")
 		elif command == "translate":
+			self._logger.debug("Translating stuff")
 			# TODO: handle double translating (i.e. translating a translated file) better
 			if Permissions.FILES_UPLOAD.can() and octoprint.filemanager.valid_file_type(data['file'], type="gcode"):
-				index = data['file'] + data['x'] + data['y']
+				index = data['index']
 
 				at = ""
 				if (index not in self.translating):
@@ -149,11 +150,19 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 						else:
 							at = "nothing"
 
+					# self._logger.debug(data['shifts'])
+					shifts = []
+					for shift in data['shifts']:
+						shifts.append((float(shift[0]), float(shift[1])))
+					self._logger.debug(shifts)
 
-					worker = TranslateWorker(self, data['x'], data['y'], data['file'], at)
+
+					worker = TranslateWorker(self, shifts, data['file'], at,
+												(self._settings.get(['layerStartRegex']), self._settings.get(['stopRegex'])
+												), index)
 					worker.start()
 				else:
-					self._plugin_manager.send_plugin_message("translatemodel", dict(state='running', file=data['file'], x=data['x'], y=data['y']))
+					self._plugin_manager.send_plugin_message("translatemodel", dict(state='running', file=data['file'], x=data['x'], y=data['y'], index=data['index']))
 
 			else:
 				self._plugin_manager.send_plugin_message("translatemodel", dict(state='invalid', file=data['file']))
@@ -168,21 +177,12 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 				self._file_manager.remove_file(FileDestinations.LOCAL, payload['path'])
 				self.delete_files.remove(payload['path'])
 				self._printer.unselect_file()
-		elif event == "FileSelected" and payload['origin'] == "local":
-			self.selected_file = payload['path']
-			self._plugin_manager.send_plugin_message("translatemodel", dict(state='selected', file=payload['path']))
-		elif event == "FileDeselected":
-			self.selected_file = ""
-			self._plugin_manager.send_plugin_message("translatemodel", dict(state='selected', file=""))
-		elif event == "ClientAuthed":
-			if self.selected_file != "":
-				self._plugin_manager.send_plugin_message("translatemodel", dict(state='selected', file=self.selected_file))
 
 
 
 __plugin_name__ = "Translate Model Plugin"
 
-__plugin_pythoncompat__ = ">=3,<4" # python 2 and 3
+__plugin_pythoncompat__ = ">=3,<4"
 
 def __plugin_load__():
 	global __plugin_implementation__

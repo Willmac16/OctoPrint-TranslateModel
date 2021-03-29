@@ -101,37 +101,121 @@ float parseFloat(std::istream *stream)
         return NAN;
 }
 
-std::string translate(float xShift, float yShift, std::string inPath,
-                        std::string objStartRegex, std::string objStopRegex,
+void translateLine(double *shift, std::string line, std::ofstream *outfile, bool *absolute, std::string *lineEnd)
+{
+    std::istringstream iss(line);
+    char cmd;
+    int num;
+    if ((iss >> cmd) && toupper(cmd) == 'G')
+    {
+        if ((iss >> num))
+        {
+            if (num >= 0 && num < 4)
+            {
+                *outfile << "G" << num;
+                char arg;
+                while ((iss >> arg) && arg != ';')
+                {
+                    if (arg == '(')
+                    {
+                        *outfile << arg;
+                        // std::cout << arg;
+                        do
+                        {
+                            iss >> arg;
+                            *outfile << arg;
+                            // std::cout << arg;
+                        }
+                        while (arg != ')');
+                    }
+                    char upp = toupper(arg);
+                    switch (upp)
+                    {
+                        case 'X':
+                            if (*absolute)
+                                *outfile << " " << arg << roundTo(3, (parseFloat(&iss)+shift[0]));
+                            else
+                                *outfile << " " << arg;
+                            break;
+                        case 'Y':
+                            if (*absolute)
+                                *outfile << " " << arg << roundTo(3, (parseFloat(&iss)+shift[1]));
+                            else
+                                *outfile << " " << arg;
+                            break;
+                        default:
+                            if (upp > 'A' && upp <= 'Z')
+                            {
+                                *outfile << " " << arg;
+                            }
+                            else
+                            {
+                                *outfile << arg;
+                            }
+                            break;
+                    }
+                }
+
+                std::string comment;
+                std::getline(iss, comment);
+
+                if (comment != "")
+                {
+                    *outfile << " ; " << comment;
+                    // debug(comment);
+                }
+            }
+            else if (num == 91)
+            {
+                *absolute = false;
+                *outfile << line;
+            }
+            else if (num == 90)
+            {
+                *absolute = true;
+                *outfile << line;
+            }
+            else
+            {
+                *outfile << line;
+            }
+        }
+    }
+    else
+    {
+        *outfile << line;
+    }
+    *outfile << *lineEnd;
+}
+
+std::string translate(double shifts[][2], int numShifts, std::string inPath,
                         std::string startRegex, std::string stopRegex, std::string version)
 {
     std::ostringstream outPath;
     std::ostringstream op;
 
-    op << ".translate_" << xShift << "_" << yShift << ".gcode";
+    op << ".translate_" << numShifts << "_shifts" << ".gcode";
     std::regex r("\\.g(co)*(de)*");
     outPath << std::regex_replace(inPath, r, op.str());
 
     std::ifstream infile(inPath);
 
-    // info("Working on file " + op.str());
+    info("Working on file " + op.str());
 
     std::string line;
     std::ofstream outfile(outPath.str());
-
-    std::regex objStart(objStartRegex);
-    std::regex objEnd(objStopRegex);
 
     std::regex start(startRegex);
     std::regex end(stopRegex);
 
     bool absolute = true;
 
-    int inObj = -1;
     int afterStart = -1;
 
-
     std::string lineEnd = "\n";
+
+    std::ostringstream layerStream;
+
 
     getline(infile, line);
 
@@ -150,133 +234,67 @@ std::string translate(float xShift, float yShift, std::string inPath,
             line.erase(line.size()-1);
         }
 
-        if (inObj == -1 && afterStart != 1)
+        if (afterStart != 1)
         {
-            if (std::regex_match(line, objStart))
-            {
-                inObj = true;
-                outfile << line << lineEnd << ";TRANSLATE-MODEL_OBJECT-START" << lineEnd;
-            }
-            else if (std::regex_match(line, start))
+            if (std::regex_match(line, start))
             {
                 afterStart = true;
-                outfile << line << lineEnd << ";TRANSLATE-MODEL_LAYER-START" << lineEnd;
+                outfile << line << lineEnd << ";TRANSLATE-MODEL_LAYER_START" << lineEnd;
+                layerStream = std::ostringstream();
             }
             else
             {
                 outfile << line << lineEnd;
             }
         }
-        else if (inObj == 0)
-        {
-            if (std::regex_match(line, objStart))
-            {
-                inObj = true;
-                outfile << line << lineEnd << ";TRANSLATE-MODEL_OBJECT-START" << lineEnd;
-            }
-        }
         else
         {
-            if (std::regex_match(line, objEnd))
-            {
-                inObj = false;
-                outfile << line << lineEnd << ";TRANSLATE-MODEL_OBJECT-STOP" << lineEnd;
-            }
-            else if (std::regex_match(line, end))
+            if (std::regex_match(line, end))
             {
                 afterStart = false;
-                outfile << line << lineEnd << ";TRANSLATE-MODEL_END-STOP" << lineEnd;
+                outfile << line << lineEnd << ";TRANSLATE-MODEL_STOP" << lineEnd;
+            }
+            else if (std::regex_match(line, start))
+            {
+                // process the layer one shift copy at a time
+
+                // any state variable (e.g. absolute positioning) need to be copied out for each shift copy
+                // then saved at the end
+                bool *abs = new bool(false);
+
+                std::istringstream layerIStream = std::istringstream(layerStream.str());
+                for (int i = 0; i < numShifts; i++)
+                {
+                    *abs = absolute;
+                    double *shift = shifts[i];
+
+                    while (getline(layerIStream, line))
+                    {
+                        translateLine(shift, line, &outfile, abs, &lineEnd);
+                    }
+
+                    layerIStream.clear();
+                    layerIStream.seekg(0);
+                }
+
+                absolute = *abs;
+                delete abs;
+
+                outfile << line << lineEnd << ";TRANSLATE-MODEL_LAYER_START" << lineEnd;
+                layerStream = std::ostringstream();
             }
             else
             {
-                std::istringstream iss(line);
-                char cmd;
-                int num;
-                if ((iss >> cmd) && toupper(cmd) == 'G')
+                // if we only have one shift then process as we scan the file
+                // but if we have more than one, we dump the line into the layerStream object
+                if (numShifts > 1)
                 {
-                    if ((iss >> num))
-                    {
-                        if (num >= 0 && num < 4)
-                        {
-                            outfile << "G" << num;
-                            char arg;
-                            float pos;
-                            while ((iss >> arg) && arg != ';')
-                            {
-                                if (arg == '(')
-                                {
-                                    outfile << arg;
-                                    // std::cout << arg;
-                                    do
-                                    {
-                                        iss >> arg;
-                                        outfile << arg;
-                                        // std::cout << arg;
-                                    }
-                                    while (arg != ')');
-                                }
-                                else if (toupper(arg) > 'A' && toupper(arg) <= 'Z')
-                                {
-                                    pos = parseFloat(&iss);
-                                    if (!isnan(pos))
-                                    {
-                                        switch (toupper(arg))
-                                        {
-                                            case 'X':
-                                                if (absolute)
-                                                    outfile << " " << arg << roundTo(3, (pos+xShift));
-                                                else
-                                                    outfile << " " << arg << roundTo(3, pos);
-                                                break;
-                                            case 'Y':
-                                                if (absolute)
-                                                    outfile << " " << arg << roundTo(3, (pos+yShift));
-                                                else
-                                                    outfile << " " << arg << roundTo(3, pos);
-                                                break;
-                                            case 'E':
-                                                outfile << " " << arg << roundTo(5, pos);
-                                                break;
-                                            default:
-                                                outfile << " " << arg << roundTo(3, pos);
-                                                break;
-                                        }
-                                    }
-                                    else
-                                        outfile << " " << arg;
-                                }
-                            }
-
-                            std::string comment;
-                            std::getline(iss, comment);
-
-                            if (comment != "")
-                            {
-                                outfile << " ; " << comment;
-                                // debug(comment);
-                            }
-                        }
-                        else if (num == 91)
-                        {
-                            absolute = false;
-                            outfile << line;
-                        }
-                        else if (num == 90)
-                        {
-                            absolute = true;
-                            outfile << line;
-                        }
-                        else
-                        {
-                            outfile << line;
-                        }
-                    }
+                    layerStream << line << lineEnd;
                 }
                 else
                 {
-                    outfile << line;
+                    translateLine(shifts[0], line, &outfile, &absolute, &lineEnd);
                 }
-                outfile << lineEnd;
             }
         }
     }
@@ -288,18 +306,56 @@ std::string translate(float xShift, float yShift, std::string inPath,
 static PyObject *
 translate_translate(PyObject *self, PyObject *args)
 {
-    float xShift, yShift;
-    const char *path, *osr, *oer, *sr, *er, *ver;
+    PyObject *shiftList;
 
-    if (!PyArg_ParseTuple(args, "ffs(ssss)s", &xShift, &yShift, &path,
-                                                &osr, &oer, &sr, &er,
-                                                                &ver))
+    const char *path, *sr, *er, *ver;
+
+    if (!PyArg_ParseTuple(args, "Os(ss)s", &shiftList, &path,
+                                            &sr, &er,
+                                            &ver))
         return NULL;
+    Py_INCREF(shiftList);
+
+    PyObject *logging_message = Py_BuildValue("s", "tuple Parsed");
+    Py_INCREF(logging_message);
+    PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    Py_DECREF(logging_message);
+
+    // parse through all the shifts
+    shiftList = PySequence_Fast(shiftList, "argument must be iterable");
+    if(!shiftList)
+        return 0;
+
+    const int numShifts = PySequence_Fast_GET_SIZE(shiftList);
+    double shifts[numShifts][2];
+
+    for (int i = 0; i < numShifts; i++)
+    {
+        PyObject *shiftSet = PySequence_Fast_GET_ITEM(shiftList, i);
+        shiftSet = PySequence_Fast(shiftSet, "argument must be iterable");
+
+        // Get the x then y coord and convert to pyfloat then c double
+        for (int j = 0; j < 2; j++)
+        {
+            shifts[i][j] = PyFloat_AS_DOUBLE(PyNumber_Float(PySequence_Fast_GET_ITEM(shiftSet, j)));
+        }
+    }
+
+    // for (int i = 0; i < numShifts; i++)
+    // {
+    //     std::cout << shifts[i][0] << ", " << shifts[i][1] << std::endl;
+    // }
+
     std::string opath;
+
+    Py_DECREF(shiftList);
+
     Py_UNBLOCK_THREADS
-    opath = translate(xShift, yShift, (std::string) path,
-                        (std::string) osr, (std::string) oer,
+    debug("Started translating");
+
+    opath = translate(shifts, numShifts, (std::string) path,
                         (std::string) sr, (std::string) er, (std::string) ver);
+    debug("Done translating");
     Py_BLOCK_THREADS
     return Py_BuildValue("s", opath.c_str());
 }
@@ -326,12 +382,56 @@ translate_test(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
+static PyObject *
+translate_shift_test(PyObject *self, PyObject *args)
+{
+    PyObject *shiftList;
+
+    if (!PyArg_ParseTuple(args, "O", &shiftList))
+        return NULL;
+    Py_INCREF(shiftList);
+
+    PyObject *logging_message = Py_BuildValue("s", "tuple Parsed");
+    Py_INCREF(logging_message);
+    PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    Py_DECREF(logging_message);
+
+    // parse through all the shifts
+    shiftList = PySequence_Fast(shiftList, "argument must be iterable");
+    if(!shiftList)
+        return 0;
+
+    const int numShifts = PySequence_Fast_GET_SIZE(shiftList);
+    double shifts[numShifts][2];
+
+    for (int i = 0; i < numShifts; i++)
+    {
+        PyObject *shiftSet = PySequence_Fast_GET_ITEM(shiftList, i);
+        shiftSet = PySequence_Fast(shiftSet, "argument must be iterable");
+
+        // Get the x then y coord and convert to pyfloat then c double
+        for (int j = 0; j < 2; j++)
+        {
+            shifts[i][j] = PyFloat_AS_DOUBLE(PyNumber_Float(PySequence_Fast_GET_ITEM(shiftSet, j)));
+        }
+    }
+
+    for (int i = 0; i < numShifts; i++)
+    {
+        std::cout << shifts[i][0] << ", " << shifts[i][1] << std::endl;
+    }
+
+    Py_RETURN_NONE;
+}
+
 
 static PyMethodDef TranslateMethods[] = {
     {"translate",  translate_translate, METH_VARARGS,
      "Translate a gcode file"},
     {"test",  translate_test, METH_VARARGS,
     "Just a test method"},
+    {"shiftTest",  translate_shift_test, METH_VARARGS,
+    "Shifts unpacking test method"},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 

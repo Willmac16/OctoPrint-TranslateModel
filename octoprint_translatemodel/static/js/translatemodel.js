@@ -24,10 +24,13 @@ $(function() {
         self.filesViewModel = parameters[2];
         self.access = parameters[3];
 
+        self.shifts = ko.observableArray([[0.0, 0.0]])
         self.xShift = ko.observable(0.0);
         self.yShift = ko.observable(0.0);
         self.translateFile = ko.observable("");
         self.afterTranslate = ko.observable("nothing");
+
+        self.translateIndex = 0;
 
         self.fileHide = /.translate_/;
 
@@ -49,21 +52,21 @@ $(function() {
 
         self.translate = function() {
             if (self.translateFile() != "") {
-                let index = self.translateFile() + parseFloat(self.xShift()).toFixed(3) + parseFloat(self.yShift()).toFixed(3);
-                if (!(index in self.notifies)) {
+                if (!(self.translateIndex in self.notifies)) {
                     $.ajax({
                         url: API_BASEURL + "plugin/translatemodel",
                         type: "POST",
                         dataType: "json",
                         data: JSON.stringify({
                             command: "translate",
-                            x: parseFloat(self.xShift()).toFixed(3),
-                            y: parseFloat(self.yShift()).toFixed(3),
+                            shifts: self.shifts(),
                             file: self.translateFile(),
-                            at: self.afterTranslate()
+                            at: self.afterTranslate(),
+                            index: self.translateIndex
                         }),
                         contentType: "application/json; charset=UTF-8"
                     });
+                    self.translateIndex++;
                 } else {
                     self.notifies[index].update({
                         title: 'Running Translating Model'});
@@ -79,29 +82,26 @@ $(function() {
                 if (data.state === "selected") {
                     self.translateFile(data.file)
                 } else if (data.state === "started") {
-                    let index = data.file + data.x + data.y;
-                    self.notifies[index] = new PNotify({
+                    self.notifies[data.index] = new PNotify({
                         title: 'Started Translating Model',
                         type: 'info',
-                        text: `Moving ${data.file} (${data.x}, ${data.y})`,
+                        text: `Moving ${data.file}`,
                         hide: false
                     });
                 } else if (data.state === "running") {
-                    let index = data.file + data.x + data.y;
                     runnDict = {
                         title: 'Running Translating Model',
                         type: 'info',
-                        text: `Moving ${data.file} (${data.x}, ${data.y})`,
+                        text: `Moving ${data.file}`,
                         hide: false
                     }
 
-                    if (index in self.notifies) {
-                        self.notifies[index].update(runnDict);
+                    if (data.index in self.notifies) {
+                        self.notifies[data.index].update(runnDict);
                     } else {
-                        self.notifies[index] = new PNotify(runnDict);
+                        self.notifies[data.index] = new PNotify(runnDict);
                     }
                 } else if (data.state === "finished") {
-                    let index = data.file + data.x + data.y;
 
                     let lastText = "<br> ";
                     if (data.afterTranslate === "load")
@@ -116,16 +116,17 @@ $(function() {
                     finishDict = {
                         type: 'success',
                         title: 'Finished Translating Model',
-                        text: `${data.file} moved <br/> (${data.x}, ${data.y}) <br/> took ${roundTo(2, data.time)}s ${lastText}`}
+                        text: `${data.file} moved <br/> took ${roundTo(2, data.time)}s ${lastText}`}
 
-                    if (index in self.notifies) {
-                        self.notifies[index].update(finishDict);
-                        delete self.notifies[index];
+                    if (data.index in self.notifies) {
+                        self.notifies[data.index].update(finishDict);
+                        delete self.notifies[data.index];
                     } else {
                         new PNotify(finishDict);
                     }
 
                 } else if (data.state === "invalid") {
+                    self.translateIndex--;
                     new PNotify({
                         title: 'Invalid Translate Model',
                         type: 'error',
@@ -138,6 +139,19 @@ $(function() {
 
         self.onDataUpdaterReconnect = function () {
             self.notifies = {};
+        }
+
+        self.addTranslation = function() {
+            self.shifts.push([0.0, 0.0]);
+        }
+
+        self.removeTranslation = function() {
+            self.shifts.remove(this);
+        }
+
+        // This is a function to trigger so that the enter key doesn't delete points
+        self.safetyButton = function() {
+            return
         }
     }
 
