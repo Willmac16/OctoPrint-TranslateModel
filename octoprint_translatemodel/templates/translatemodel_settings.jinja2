@@ -32,18 +32,6 @@
         <div class="row-fluid">
             <input type="text" id="disabledTextInput" disabled class="span12 pull-left" placeholder="Select a file in the file pane" data-bind="value: translateFile">
         </div>
-        <!-- <div class="row-fluid">
-            <div class="input-prepend input-append">
-                <span class="add-on">X:</span>
-                <input type="number" class="input-small" data-bind="value: xShift" placeholder="0.0" step=0.001>
-                <span class="add-on">mm</span>
-            </div>
-            <div class="input-prepend input-append">
-                <span class="add-on">Y:</span>
-                <input type="number" class="input-small" data-bind="value: yShift" placeholder="0.0" step=0.001>
-                <span class="add-on">mm</span>
-            </div>
-        </div> -->
         <form class="form-horizontal">
             <button data-bind="click: safetyButton" style="visibility: hidden"></button>
             <div class="row-fluid">
@@ -91,8 +79,25 @@
     </div>
 
     <div class="modal-footer">
-        <button title="Translate" class="btn btn-primary span1 pull-right" data-bind="click: translate, enable: loginState.hasPermissionKo(access.permissions.FILES_UPLOAD) && translateFile() !== '' " data-dismiss="modal">
+        <button class="btn btn-primary" data-bind="click: preview, visible: gcodeViewModel" href="#translate-gcode-preview-modal" data-toggle="modal" title="Translate Model Gcode Preview">
+            <i class="fas fa-search"></i>
+        </button>
+        <button title="Translate" class="btn btn-primary" data-bind="click: translate, enable: loginState.hasPermissionKo(access.permissions.FILES_UPLOAD) && translateFile() !== '' " data-dismiss="modal">
             <i class="fa fa-arrows-alt"></i>
         </button>
+    </div>
+</div>
+
+<!-- Translate Gcode Preview Modal - - Pops up with a preview of current set of shifts -->
+<div id="translate-gcode-preview-modal" class="modal hide fade" tabindex="-1" role="dialog"
+    aria-hidden="true">
+    <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+        <h3>Translate Model Gcode Preview</h3>
+    </div>
+    <div id="TM-GcodePreview" class="modal-body canvas_container">
+    </div>
+    <div class="modal-footer">
+        <button title="Translate" class="btn btn-primary" data-dismiss="modal">Done</button>
     </div>
 </div>

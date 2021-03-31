@@ -23,6 +23,7 @@ $(function() {
         self.settingsViewModel = parameters[1];
         self.filesViewModel = parameters[2];
         self.access = parameters[3];
+        self.gcodeViewModel = parameters[4];
 
         self.shifts = ko.observableArray([[0.0, 0.0]])
         self.xShift = ko.observable(0.0);
@@ -35,6 +36,8 @@ $(function() {
         self.fileHide = /.translate_/;
 
         self.notifies = {};
+
+        self.gcode_clone = false;
 
         self.filesViewModel.translateSelect = function (data) {
             // console.log("Translating file "+ data.path);
@@ -51,37 +54,50 @@ $(function() {
         });
 
         self.translate = function() {
-            if (self.translateFile() != "") {
-                if (!(self.translateIndex in self.notifies)) {
-                    $.ajax({
-                        url: API_BASEURL + "plugin/translatemodel",
-                        type: "POST",
-                        dataType: "json",
-                        data: JSON.stringify({
-                            command: "translate",
-                            shifts: self.shifts(),
-                            file: self.translateFile(),
-                            at: self.afterTranslate(),
-                            index: self.translateIndex
-                        }),
-                        contentType: "application/json; charset=UTF-8"
-                    });
-                    self.translateIndex++;
-                } else {
-                    self.notifies[index].update({
-                        title: 'Running Translating Model'});
-                    console.log("File already translating");
-                }
+            if (!(self.translateIndex in self.notifies)) {
+                $.ajax({
+                    url: API_BASEURL + "plugin/translatemodel",
+                    type: "POST",
+                    dataType: "json",
+                    data: JSON.stringify({
+                        command: "translate",
+                        shifts: self.shifts(),
+                        file: self.translateFile(),
+                        at: self.afterTranslate(),
+                        index: self.translateIndex
+                    }),
+                    contentType: "application/json; charset=UTF-8"
+                });
+                self.translateIndex++;
             } else {
-                console.log("select a file");
+                self.notifies[index].update({
+                    title: 'Running Translating Model'});
+                console.log("File already translating");
+            }
+        }
+
+        self.preview = function() {
+            if (self.gcodeViewModel) {
+                console.log("Previewing translate");
+
+                // translate preview api call
+                $.ajax({
+                    url: API_BASEURL + "plugin/translatemodel",
+                    type: "POST",
+                    dataType: "json",
+                    data: JSON.stringify({
+                        command: "preview",
+                        shifts: self.shifts(),
+                        file: self.translateFile()
+                    }),
+                    contentType: "application/json; charset=UTF-8"
+                });
             }
         }
 
         self.onDataUpdaterPluginMessage = function(plugin, data) {
             if (plugin === "translatemodel") {
-                if (data.state === "selected") {
-                    self.translateFile(data.file)
-                } else if (data.state === "started") {
+                if (data.state === "started") {
                     self.notifies[data.index] = new PNotify({
                         title: 'Started Translating Model',
                         type: 'info',
@@ -133,6 +149,8 @@ $(function() {
                         text: `Cannot Translate non-gcode file: ${data.file}`,
                         hide: false
                     });
+                } else if (data.state === "preview") {
+                    self.showGCodeViewer(data.previewGcode);
                 }
             }
         }
@@ -153,6 +171,46 @@ $(function() {
         self.safetyButton = function() {
             return
         }
+
+        // GcodeViewer Stuff brought in for translate preview
+        self.showGCodeViewer = function (response) {
+            // load file preview into gcode viewer
+            var par = {
+                target: {
+                    result: response
+                }
+            };
+            GCODE.renderer.clear();
+            GCODE.gCodeReader.loadFile(par);
+
+            const gcodeSquareSize = 530;
+
+            // copy gcode viewer canvas object
+            if (!self.gcode_clone) {
+                self.gcode_clone = $('#gcode_canvas').clone();
+                self.gcode_clone.attr('id', "TM-Preview-Canvas");
+                self.gcode_clone.attr('width', gcodeSquareSize);
+                self.gcode_clone.attr('height', gcodeSquareSize);
+                self.gcode_clone.css('width', gcodeSquareSize);
+                self.gcode_clone.css('height', gcodeSquareSize);
+
+
+                $('#TM-GcodePreview').html(self.gcode_clone);
+            }
+
+            // copy canvas content once it loads
+            if (self.preview_load_sub) self.preview_load_sub.dispose();
+            self.preview_load_sub = self.gcodeViewModel.ui_modelInfo.subscribe(function(newValue) {
+                var ctx = self.gcode_clone[0].getContext('2d');
+                var original = $('#gcode_canvas')[0];
+
+                // var imgData = original.getImageData(19, 19,
+                //                                     519, 519);
+                // ctx.putImageData(imgData, 0, 0, gcodeSquareSize, gcodeSquareSize);
+                ctx.drawImage(original, 0, 0, 530, 530)
+                self.preview_load_sub.dispose();
+            });
+        };
     }
 
     /* view model class, parameters for constructor, container to bind to
@@ -161,7 +219,8 @@ $(function() {
      */
     OCTOPRINT_VIEWMODELS.push({
         construct: TranslatemodelViewModel,
-        dependencies: [ "loginStateViewModel", "settingsViewModel", "filesViewModel", "accessViewModel" ],
+        dependencies: [ "loginStateViewModel", "settingsViewModel", "filesViewModel", "accessViewModel", "gcodeViewModel" ],
+        optional: [ "gcodeViewModel" ],
         elements: [ "#settings_plugin_translatemodel" ]
     });
 });

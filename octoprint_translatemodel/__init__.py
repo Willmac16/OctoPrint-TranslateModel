@@ -23,40 +23,47 @@ class TranslateWorker(threading.Thread):
 		self.index = index
 
 	def run(self):
-		# Let the log+frontend know that the file is being processed
-		self._plugin._logger.info("translate called, {})".format(self.file))
-		self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='started', file=self.file, shifts=self.shifts, index=self.index))
+		if (self.after_translate == "preview"):
+			self._plugin._logger.info("preview called, {}".format(self.file))
+			origPath = self._plugin._file_manager.path_on_disk(FileDestinations.LOCAL, self.file)
 
-		origPath = self._plugin._file_manager.path_on_disk(FileDestinations.LOCAL, self.file)
+			gcode = translate.translate(self.shifts, origPath, self.regexTuple, self._plugin._plugin_version, True)
+			self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='preview', previewGcode=gcode))
+		else:
+			# Let the log+frontend know that the file is being processed
+			self._plugin._logger.info("translate called, {})".format(self.file))
+			self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='started', file=self.file, shifts=self.shifts, index=self.index))
 
-		startTime = time.time()
-		# runs the c++ file processing
-		longPath = translate.translate(self.shifts, origPath, self.regexTuple, self._plugin._plugin_version)
+			origPath = self._plugin._file_manager.path_on_disk(FileDestinations.LOCAL, self.file)
 
-		endTime = time.time()
-		procTime = endTime-startTime
+			startTime = time.time()
+			# runs the c++ file processing
+			longPath = translate.translate(self.shifts, origPath, self.regexTuple, self._plugin._plugin_version)
 
-		self._plugin._logger.debug(longPath)
+			endTime = time.time()
+			procTime = endTime-startTime
 
-		# work out the different forms of the path
-		shortPath = self._plugin._file_manager.path_in_storage(FileDestinations.LOCAL, longPath)
-		path, name = self._plugin._file_manager.canonicalize(FileDestinations.LOCAL, longPath)
+			self._plugin._logger.debug(longPath)
 
-		# takes the file from c++ and adds it into octoprint
-		newFO = octoprint.filemanager.util.DiskFileWrapper(name, longPath, move=True)
-		self._plugin._file_manager.add_file(FileDestinations.LOCAL, longPath, newFO, allow_overwrite=True)
+			# work out the different forms of the path
+			shortPath = self._plugin._file_manager.path_in_storage(FileDestinations.LOCAL, longPath)
+			path, name = self._plugin._file_manager.canonicalize(FileDestinations.LOCAL, longPath)
 
-		# Let the log+frontend know that the file is done
-		self._plugin._logger.info("Done with file {}: took {}s; saved as {}".format(self.file, procTime, shortPath))
-		self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, time=procTime, path=shortPath, afterTranslate=self.after_translate))
+			# takes the file from c++ and adds it into octoprint
+			newFO = octoprint.filemanager.util.DiskFileWrapper(name, longPath, move=True)
+			self._plugin._file_manager.add_file(FileDestinations.LOCAL, longPath, newFO, allow_overwrite=True)
 
-		self._plugin.translating.remove(self.index)
+			# Let the log+frontend know that the file is done
+			self._plugin._logger.info("Done with file {}: took {}s; saved as {}".format(self.file, procTime, shortPath))
+			self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, time=procTime, path=shortPath, afterTranslate=self.after_translate))
 
-		# load and print the file as necessary
-		if self.after_translate in ("load", "print", "printAndDelete"):
-			print = self.after_translate in ("print", "printAndDelete")
-			self._plugin._printer.select_file(shortPath, False, printAfterSelect=print)
-			self._plugin.delete_files.append(shortPath)
+			self._plugin.translating.remove(self.index)
+
+			# load and print the file as necessary
+			if self.after_translate in ("load", "print", "printAndDelete"):
+				print = self.after_translate in ("print", "printAndDelete")
+				self._plugin._printer.select_file(shortPath, False, printAfterSelect=print)
+				self._plugin.delete_files.append(shortPath)
 
 
 class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
@@ -122,6 +129,7 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 	def get_api_commands(self):
 		return dict(
 			translate=["file", "shifts", 'at', 'index'],
+			preview=["file", "shifts"],
 			test=[]
 		)
 
@@ -154,8 +162,6 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 					shifts = []
 					for shift in data['shifts']:
 						shifts.append((float(shift[0]), float(shift[1])))
-					self._logger.debug(shifts)
-
 
 					worker = TranslateWorker(self, shifts, data['file'], at,
 												(self._settings.get(['layerStartRegex']), self._settings.get(['stopRegex'])
@@ -166,6 +172,16 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 
 			else:
 				self._plugin_manager.send_plugin_message("translatemodel", dict(state='invalid', file=data['file']))
+		elif command == "preview":
+			if Permissions.FILES_UPLOAD.can() and octoprint.filemanager.valid_file_type(data['file'], type="gcode"):
+				shifts = []
+				for shift in data['shifts']:
+					shifts.append((float(shift[0]), float(shift[1])))
+
+				worker = TranslateWorker(self, shifts, data['file'], "preview",
+											(self._settings.get(['layerStartRegex']), self._settings.get(['stopRegex'])
+											), 0)
+				worker.start()
 
 
 	##~~EventHandlerPlugin mixin
@@ -174,9 +190,9 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 		if event in ("PrintFailed", "PrintDone", "PrintCanceled") and payload['origin'] == "local":
 			if payload['path'] in self.delete_files:
 				self._logger.info("Deleting {} after print end".format(payload['path']))
+				self._printer.unselect_file()
 				self._file_manager.remove_file(FileDestinations.LOCAL, payload['path'])
 				self.delete_files.remove(payload['path'])
-				self._printer.unselect_file()
 
 
 
