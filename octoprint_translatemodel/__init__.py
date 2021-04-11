@@ -55,7 +55,7 @@ class TranslateWorker(threading.Thread):
 
 			# Let the log+frontend know that the file is done
 			self._plugin._logger.info("Done with file {}: took {}s; saved as {}".format(self.file, procTime, shortPath))
-			self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, time=procTime, path=shortPath, afterTranslate=self.after_translate))
+			self._plugin._plugin_manager.send_plugin_message("translatemodel", dict(state='finished', file=self.file, time=procTime, path=shortPath, afterTranslate=self.after_translate, index=self.index))
 
 			self._plugin.translating.remove(self.index)
 
@@ -88,8 +88,8 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 	def get_settings_defaults(self):
 		return dict(
 			# put your plugin's default settings here
-			layerStartRegex="^;(( BEGIN_|AFTER_)*LAYER_(CHANGE|OBJECT)|LAYER:[0-9]+| [<]{0,1}layer [0-9]+[>,]{0,1}).*$",
-			stopRegex="(end|disable)"
+			layerStartRegex="^;(( BEGIN_|BEFORE_)*LAYER_(CHANGE|OBJECT)|LAYER:[0-9]+| [<]{0,1}layer [0-9]+[>,]{0,1}).*$",
+			stopRegex="(end|disable|^; Filament-specific end gcode$)"
 		)
 
 	##~~ AssetPlugin mixin
@@ -128,7 +128,7 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 
 	def get_api_commands(self):
 		return dict(
-			translate=["file", "shifts", 'at', 'index'],
+			translate=["file", "shifts", 'at'],
 			preview=["file", "shifts"],
 			test=[]
 		)
@@ -140,7 +140,12 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 			self._logger.debug("Translating stuff")
 			# TODO: handle double translating (i.e. translating a translated file) better
 			if Permissions.FILES_UPLOAD.can() and octoprint.filemanager.valid_file_type(data['file'], type="gcode"):
-				index = data['index']
+
+				hashString = data['file']
+				for x, y in data['shifts']:
+					hashString += " {} {};".format(x, y)
+
+				index = hash(hashString)
 
 				at = ""
 				if (index not in self.translating):
@@ -158,7 +163,6 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 						else:
 							at = "nothing"
 
-					# self._logger.debug(data['shifts'])
 					shifts = []
 					for shift in data['shifts']:
 						shifts.append((float(shift[0]), float(shift[1])))
@@ -168,7 +172,7 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 												), index)
 					worker.start()
 				else:
-					self._plugin_manager.send_plugin_message("translatemodel", dict(state='running', file=data['file'], x=data['x'], y=data['y'], index=data['index']))
+					self._plugin_manager.send_plugin_message("translatemodel", dict(state='running', file=data['file'], shifts=len(shifts), index=index))
 
 			else:
 				self._plugin_manager.send_plugin_message("translatemodel", dict(state='invalid', file=data['file']))

@@ -12,3 +12,4 @@ dist
 *.so
 test.py
 /testfiles/
+Makefile

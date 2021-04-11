@@ -162,7 +162,6 @@ void translateLine(double *shift, std::string line, std::ostream *out, bool *abs
                 if (comment != "")
                 {
                     *out << " ; " << comment;
-                    // debug(comment);
                 }
             }
             else if (num == 91)
@@ -276,6 +275,34 @@ std::string translate(double shifts[][2], int numShifts, std::string inPath,
         {
             if (std::regex_match(line, end))
             {
+                // spit out copies up until now
+                if (numShifts > 1)
+                {
+                    // process the layer one shift copy at a time
+
+                    // any state variable (e.g. absolute positioning) need to be copied out for each shift copy
+                    // then saved at the end
+                    bool *abs = new bool(false);
+
+                    std::istringstream layerIStream = std::istringstream(layerStream.str());
+                    for (int i = 0; i < numShifts; i++)
+                    {
+                        *abs = absolute;
+                        double *shift = shifts[i];
+
+                        while (getline(layerIStream, line))
+                        {
+                            translateLine(shift, line, &out, abs, &lineEnd);
+                        }
+
+                        layerIStream.clear();
+                        layerIStream.seekg(0);
+                    }
+
+                    absolute = *abs;
+                    delete abs;
+                }
+
                 afterStart = false;
                 out << line << lineEnd << ";TRANSLATE-MODEL_STOP" << lineEnd;
             }
@@ -337,14 +364,40 @@ std::string translate(double shifts[][2], int numShifts, std::string inPath,
     }
     while (getline(infile, line));
 
-    debug("just before failure");
-
     if (preview)
     {
         return previewGcode.str();
     }
     else
     {
+        // spit out copies for any left over lines
+        if (numShifts > 1)
+        {
+            // process the layer one shift copy at a time
+
+            // any state variable (e.g. absolute positioning) need to be copied out for each shift copy
+            // then saved at the end
+            bool *abs = new bool(false);
+
+            std::istringstream layerIStream = std::istringstream(layerStream.str());
+            for (int i = 0; i < numShifts; i++)
+            {
+                *abs = absolute;
+                double *shift = shifts[i];
+
+                while (getline(layerIStream, line))
+                {
+                    translateLine(shift, line, &out, abs, &lineEnd);
+                }
+
+                layerIStream.clear();
+                layerIStream.seekg(0);
+            }
+
+            absolute = *abs;
+            delete abs;
+        }
+
         return opath;
     }
 }

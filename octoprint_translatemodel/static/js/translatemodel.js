@@ -4,17 +4,6 @@
  * Author: Will MacCormack
  * License: AGPLv3
  */
-function roundTo(digits, number) {
-    for (let i=0; i<digits; i++) {
-        number *= 10;
-    }
-    out = Math.round(number)
-    for (let i=0; i<digits; i++) {
-        out /= 10;
-    }
-    return out;
-}
-
 $(function() {
     function TranslatemodelViewModel(parameters) {
         var self = this;
@@ -30,8 +19,6 @@ $(function() {
         self.yShift = ko.observable(0.0);
         self.translateFile = ko.observable("");
         self.afterTranslate = ko.observable("nothing");
-
-        self.translateIndex = 0;
 
         self.fileHide = /.translate_/;
 
@@ -54,26 +41,18 @@ $(function() {
         });
 
         self.translate = function() {
-            if (!(self.translateIndex in self.notifies)) {
-                $.ajax({
-                    url: API_BASEURL + "plugin/translatemodel",
-                    type: "POST",
-                    dataType: "json",
-                    data: JSON.stringify({
-                        command: "translate",
-                        shifts: self.shifts(),
-                        file: self.translateFile(),
-                        at: self.afterTranslate(),
-                        index: self.translateIndex
-                    }),
-                    contentType: "application/json; charset=UTF-8"
-                });
-                self.translateIndex++;
-            } else {
-                self.notifies[index].update({
-                    title: 'Running Translating Model'});
-                console.log("File already translating");
-            }
+            $.ajax({
+                url: API_BASEURL + "plugin/translatemodel",
+                type: "POST",
+                dataType: "json",
+                data: JSON.stringify({
+                    command: "translate",
+                    shifts: self.shifts(),
+                    file: self.translateFile(),
+                    at: self.afterTranslate()
+                }),
+                contentType: "application/json; charset=UTF-8"
+            });
         }
 
         self.preview = function() {
@@ -132,7 +111,7 @@ $(function() {
                     finishDict = {
                         type: 'success',
                         title: 'Finished Translating Model',
-                        text: `${data.file} moved <br/> took ${roundTo(2, data.time)}s ${lastText}`}
+                        text: `${data.file} moved <br/> took ${data.time.toFixed(2)}s ${lastText}`}
 
                     if (data.index in self.notifies) {
                         self.notifies[data.index].update(finishDict);
@@ -142,7 +121,6 @@ $(function() {
                     }
 
                 } else if (data.state === "invalid") {
-                    self.translateIndex--;
                     new PNotify({
                         title: 'Invalid Translate Model',
                         type: 'error',
@@ -180,8 +158,11 @@ $(function() {
                     result: response
                 }
             };
+
             GCODE.renderer.clear();
             GCODE.gCodeReader.loadFile(par);
+            self.gcodeViewModel.renderer_centerViewport(true);
+
 
             const gcodeSquareSize = 530;
 
