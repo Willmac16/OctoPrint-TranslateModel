@@ -220,8 +220,6 @@ std::string translate(double shifts[][2], int numShifts, std::string inPath,
         opath = outPath.str();
         info("Working on file " + opath);
 
-        std::ofstream outfile(opath);
-
         fileBuffer.open(opath.c_str(), std::ios_base::out);
 
         out.rdbuf(&fileBuffer);
@@ -305,6 +303,7 @@ std::string translate(double shifts[][2], int numShifts, std::string inPath,
 
                 afterStart = false;
                 out << line << lineEnd << ";TRANSLATE-MODEL_STOP" << lineEnd;
+                layerStream = std::ostringstream();
             }
             else if (std::regex_match(line, start))
             {
