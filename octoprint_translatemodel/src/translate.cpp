@@ -187,7 +187,7 @@ void translateLine(double *shift, std::string line, std::ostream *out, bool *abs
     *out << *lineEnd;
 }
 
-std::string translate(double shifts[][2], int numShifts, std::string inPath,
+std::string translate(double **shifts, int numShifts, std::string inPath,
                         std::string startRegex, std::string stopRegex, std::string version, int preview)
 {
     std::ifstream infile(inPath);
@@ -433,10 +433,11 @@ translate_translate(PyObject *self, PyObject *args)
         return 0;
 
     const int numShifts = PySequence_Fast_GET_SIZE(shiftList);
-    double shifts[numShifts][2];
+    double** shifts = new double* [numShifts];
 
     for (int i = 0; i < numShifts; i++)
     {
+        shifts[i] = new double [2];
         PyObject *shiftSet = PySequence_Fast_GET_ITEM(shiftList, i);
         shiftSet = PySequence_Fast(shiftSet, "argument must be iterable");
 
@@ -463,6 +464,13 @@ translate_translate(PyObject *self, PyObject *args)
     opath = translate(shifts, numShifts, (std::string) path,
                         (std::string) sr, (std::string) er, (std::string) ver, preview);
     debug("Done translating");
+    
+    for (int i = 0; i < numShifts; i++)
+    {
+        delete[] shifts[i];
+    }
+    delete[] shifts;
+
     Py_BLOCK_THREADS
     return Py_BuildValue("s", opath.c_str());
 }
