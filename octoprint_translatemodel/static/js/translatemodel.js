@@ -32,12 +32,16 @@ $(function() {
         };
 
         $(document).ready(function() {
-            let regex = /<div class="btn-group action-buttons">([\s\S]*)<.div>/mi;
-            let template = '<div class="btn btn-mini" data-bind="click: function() { if ($root.loginState.isUser()) { $root.translateSelect($data) } else { return; } }, css: {disabled: !$root.loginState.isUser()}" href="#translate-model-modal" data-toggle="modal" title="Translate Model"><i class="fa fa-arrows-alt"></i></div>';
+            let regex = /<div class="btn-group action-buttons"(?: data-bind="css: 'cpq-' \+ display\.split\('\.'\)\[1\]")?>([\s\S]*)<\/div>/mi;
+			let template = '<div class="btn btn-mini" data-bind="click: function() { if ($root.loginState.isUser()) { $root.translateSelect($data) } else { return; } }, css: {disabled: !$root.loginState.isUser()}" href="#translate-model-modal" data-toggle="modal" title="Translate Model"><i class="fa fa-arrows-alt"></i></div>';
 
-            $("#files_template_machinecode").text(function () {
-                return $(this).text().replace(regex, '<div class="btn-group action-buttons">$1	' + template + '></div>');
-            });
+			$("#files_template_machinecode").text(function () {
+                if($(this).text().indexOf('data-bind="css: \'cpq-\'') > 0) {
+                    return $(this).text().replace(regex, '<div class="btn-group action-buttons" data-bind="css: \'cpq-\' + display.split(\'.\')[1]">$1	' + template + '></div>');
+                } else {
+                    return $(this).text().replace(regex, '<div class="btn-group action-buttons">$1	' + template + '></div>');
+                }
+			});
         });
 
         self.translate = function() {
