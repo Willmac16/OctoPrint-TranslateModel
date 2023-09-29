@@ -230,6 +230,8 @@ std::string translate(double shifts[][2], int numShifts, std::string inPath,
     std::regex start(startRegex);
     std::regex end(stopRegex);
 
+    std::regex m555("^M555.*$");    //NEW PATTERN FOR PRUSA M555 "bed area to probe" COMMAND
+
     bool absolute = true;
 
     int afterStart = -1;
@@ -258,7 +260,102 @@ std::string translate(double shifts[][2], int numShifts, std::string inPath,
 
         if (afterStart != 1)
         {
-            if (std::regex_match(line, start))
+            if (std::regex_match(line, m555)) // THIS BLOCK IS FOR PRUSA M555, WHICH DEFINES "USED BED AREA" FOR G29 PROBING
+            {
+                // NEW CODE HERE FOR M555 AS FOLLOWS:
+                //   - Decode existing line for original M555 X, Y, W, H values
+                std::istringstream iss(line);
+                char arg;
+                float origX = 0;
+                float origY = 0;
+                float origW = 0;
+                float origH = 0;
+                while (iss >> arg)
+                {
+                    char upp = toupper(arg);
+                    // if (iss >> num)
+                    switch (upp)
+                    {
+                    case 'M':
+                            break;
+                    case 'X':
+                            origX = parseFloat(&iss);
+                            break;
+                    case 'Y':
+                            origY = parseFloat(&iss);
+                            break;
+                    case 'W':
+                            origW = parseFloat(&iss);
+                            break;
+                    case 'H':
+                            origH = parseFloat(&iss);
+                            break;
+                    }
+                }
+                //  - If multiple shifts:
+                //      - iterate to find minimum and maximum X translation "minXoffset" and "maxXoffset"
+                //      - iterate to find minimum and maximum Y translation "minYoffset" and "maxYoffset"
+                //      - set minX = origX+minXoffset  (new x origin of entire print, all shifts/copies)
+                //		- set minY = origY+minYoffset  (new y origin of entire print, all shifts/copies)
+                //    else
+                //	    - set minX=maxX=origX+shift, minY=maxY=origY+shift  (new origin is minX, minY)
+
+                float minX;
+                float minY;
+                float maxX;
+                float maxY;
+
+                if (numShifts > 1) // multiple shifts, find extents of build plate content
+                {
+                    float minXshift;
+                    float maxXshift;
+                    float minYshift;
+                    float maxYshift;
+
+                    for (int i = 0; i < numShifts; i++)
+                    {
+                            double *shift = shifts[i];
+                            if (i == 0)
+                            {
+                                minXshift = shift[0];
+                                maxXshift = shift[0];
+                                minYshift = shift[1];
+                                maxYshift = shift[1];
+                            }
+                            else
+                            {
+                                if (shift[0] < minXshift)
+                                    minXshift = shift[0];
+                                if (shift[0] > maxXshift)
+                                    maxXshift = shift[0];
+                                if (shift[1] < minYshift)
+                                    minYshift = shift[1];
+                                if (shift[1] > maxYshift)
+                                    maxYshift = shift[1];
+                            }
+                    }
+                    minX = origX + minXshift;
+                    minY = origY + minYshift;
+                    maxX = origX + maxXshift;
+                    maxY = origY + maxYshift;
+                }
+                else // only one shift
+                {
+                    minX = origX + shifts[0][0];
+                    maxX = minX;
+                    minY = origY + shifts[0][1];
+                    maxY = minY;
+                }
+                //  - Calculate newW = (maxX+W)-minX
+                //  - Calculate newH = (maxY+H)-minY
+                float newW;
+                float newH;
+                newW = maxX + origW - minX;
+                newH = maxY + origH - minY;
+                //  - Write new M555 X<minX> Y<minY> W<newW> H<newH>
+                out << "M555 X" << roundTo(3, minX) << " Y" << roundTo(3, minY) << " W" << roundTo(3, newW) << " H" << roundTo(3, newH) << " ;TRANSLATE-MODEL_BED_AREA" << lineEnd;
+            }
+            else if (std::regex_match(line, start))
             {
                 afterStart = true;
                 out << line << lineEnd << ";TRANSLATE-MODEL_LAYER_START" << lineEnd;
