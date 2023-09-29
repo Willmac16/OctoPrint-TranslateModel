@@ -25,3 +25,4 @@ or manually using this URL:
 
 * Thanks to KenLucke for the plugin suggestion and testing help.
 * Thanks to AlexDashwood for the fix for a conflict with ContinuousPrint
+* Thanks to ScottWell1 for adding support for Prusa's `M555` command
