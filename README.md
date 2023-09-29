@@ -24,3 +24,4 @@ or manually using this URL:
 ## Credits
 
 * Thanks to KenLucke for the plugin suggestion and testing help.
+* Thanks to AlexDashwood for the fix for a conflict with ContinuousPrint
