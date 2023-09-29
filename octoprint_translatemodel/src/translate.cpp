@@ -276,8 +276,6 @@ std::string translate(double shifts[][2], int numShifts, std::string inPath,
                     // if (iss >> num)
                     switch (upp)
                     {
-                    case 'M':
-                            break;
                     case 'X':
                             origX = parseFloat(&iss);
                             break;
@@ -307,32 +305,22 @@ std::string translate(double shifts[][2], int numShifts, std::string inPath,
 
                 if (numShifts > 1) // multiple shifts, find extents of build plate content
                 {
-                    float minXshift;
-                    float maxXshift;
-                    float minYshift;
-                    float maxYshift;
+                    float minXshift = shifts[0][0];
+                    float maxXshift = shifts[0][0];
+                    float minYshift = shifts[0][1];
+                    float maxYshift = shifts[0][1];
 
-                    for (int i = 0; i < numShifts; i++)
+                    for (int i = 1; i < numShifts; i++)
                     {
                             double *shift = shifts[i];
-                            if (i == 0)
-                            {
+                            if (shift[0] < minXshift)
                                 minXshift = shift[0];
+                            if (shift[0] > maxXshift)
                                 maxXshift = shift[0];
+                            if (shift[1] < minYshift)
                                 minYshift = shift[1];
+                            if (shift[1] > maxYshift)
                                 maxYshift = shift[1];
-                            }
-                            else
-                            {
-                                if (shift[0] < minXshift)
-                                    minXshift = shift[0];
-                                if (shift[0] > maxXshift)
-                                    maxXshift = shift[0];
-                                if (shift[1] < minYshift)
-                                    minYshift = shift[1];
-                                if (shift[1] > maxYshift)
-                                    maxYshift = shift[1];
-                            }
                     }
                     minX = origX + minXshift;
                     minY = origY + minYshift;
@@ -348,10 +336,9 @@ std::string translate(double shifts[][2], int numShifts, std::string inPath,
                 }
                 //  - Calculate newW = (maxX+W)-minX
                 //  - Calculate newH = (maxY+H)-minY
-                float newW;
-                float newH;
-                newW = maxX + origW - minX;
-                newH = maxY + origH - minY;
+                float newW = maxX + origW - minX;
+                float newH = maxY + origH - minY;
+
                 //  - Write new M555 X<minX> Y<minY> W<newW> H<newH>
                 out << "M555 X" << roundTo(3, minX) << " Y" << roundTo(3, minY) << " W" << roundTo(3, newW) << " H" << roundTo(3, newH) << " ;TRANSLATE-MODEL_BED_AREA" << lineEnd;
             }
