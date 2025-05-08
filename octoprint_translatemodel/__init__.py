@@ -137,45 +137,45 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 		if command == "test":
 			self._logger.info("test called")
 		elif command == "translate":
-			self._logger.debug("Translating stuff")
-			# TODO: handle double translating (i.e. translating a translated file) better
-			if Permissions.FILES_UPLOAD.can() and octoprint.filemanager.valid_file_type(data['file'], type="gcode"):
+			if Permissions.FILES_UPLOAD.can():
+				self._logger.debug("Translating stuff")
+				# TODO: handle double translating (i.e. translating a translated file) better
 
-				hashString = data['file']
-				for x, y in data['shifts']:
-					hashString += " {} {};".format(x, y)
+				if octoprint.filemanager.valid_file_type(data['file'], type="gcode"):
+					hashString = data['file']
+					for x, y in data['shifts']:
+						hashString += " {} {};".format(x, y)
 
-				index = hash(hashString)
+					index = hash(hashString)
 
-				at = ""
-				if (index not in self.translating):
-					self.translating.append(index)
-					if data['at'] == "load":
-						if Permissions.FILES_SELECT.can():
-							at = data['at']
-
-					if data['at'] == "print" or data['at'] == "printAndDelete":
-						if Permissions.FILES_SELECT.can():
-							if Permissions.PRINT.can():
+					at = ""
+					if (index not in self.translating):
+						self.translating.append(index)
+						if data['at'] == "load":
+							if Permissions.FILES_SELECT.can():
 								at = data['at']
+
+						if data['at'] == "print" or data['at'] == "printAndDelete":
+							if Permissions.FILES_SELECT.can():
+								if Permissions.PRINT.can():
+									at = data['at']
+								else:
+									at = "load"
 							else:
-								at = "load"
-						else:
-							at = "nothing"
+								at = "nothing"
 
-					shifts = []
-					for shift in data['shifts']:
-						shifts.append((float(shift[0]), float(shift[1])))
+						shifts = []
+						for shift in data['shifts']:
+							shifts.append((float(shift[0]), float(shift[1])))
 
-					worker = TranslateWorker(self, shifts, data['file'], at,
-												(self._settings.get(['layerStartRegex']), self._settings.get(['stopRegex'])
-												), index)
-					worker.start()
+						worker = TranslateWorker(self, shifts, data['file'], at,
+													(self._settings.get(['layerStartRegex']), self._settings.get(['stopRegex'])
+													), index)
+						worker.start()
+					else:
+						self._plugin_manager.send_plugin_message("translatemodel", dict(state='running', file=data['file'], shifts=len(shifts), index=index))
 				else:
-					self._plugin_manager.send_plugin_message("translatemodel", dict(state='running', file=data['file'], shifts=len(shifts), index=index))
-
-			else:
-				self._plugin_manager.send_plugin_message("translatemodel", dict(state='invalid', file=data['file']))
+					self._plugin_manager.send_plugin_message("translatemodel", dict(state='invalid', file=data['file']))
 		elif command == "preview":
 			if Permissions.FILES_UPLOAD.can() and octoprint.filemanager.valid_file_type(data['file'], type="gcode"):
 				shifts = []
