@@ -84,14 +84,14 @@ $(function() {
                     self.notifies[data.index] = new PNotify({
                         title: 'Started Translating Model',
                         type: 'info',
-                        text: `Moving ${data.file}`,
+                        text: `Moving ${_.escape(data.file)}`,
                         hide: false
                     });
                 } else if (data.state === "running") {
                     runnDict = {
                         title: 'Running Translating Model',
                         type: 'info',
-                        text: `Moving ${data.file}`,
+                        text: `Moving ${_.escape(data.file)}`,
                         hide: false
                     }
 
@@ -110,12 +110,12 @@ $(function() {
                     else if (data.afterTranslate === "printAndDelete")
                         lastText += `is printing and will delete once complete`;
                     else
-                        lastText += `is available @ ${data.path}`;
+                        lastText += `is available @ ${_.escape(data.path)}`;
 
                     finishDict = {
                         type: 'success',
                         title: 'Finished Translating Model',
-                        text: `${data.file} moved <br/> took ${data.time.toFixed(2)}s ${lastText}`}
+                        text: `${_.escape(data.file)} moved <br/> took ${_.escape(data.time.toFixed(2))}s ${lastText}`}
 
                     if (data.index in self.notifies) {
                         self.notifies[data.index].update(finishDict);
@@ -128,7 +128,7 @@ $(function() {
                     new PNotify({
                         title: 'Invalid Translate Model',
                         type: 'error',
-                        text: `Cannot Translate non-gcode file: ${data.file}`,
+                        text: `Cannot Translate non-gcode file: ${_.escape(data.file)}`,
                         hide: false
                     });
                 } else if (data.state === "preview") {
