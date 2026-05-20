@@ -51,7 +51,7 @@ plugin_additional_packages = []
 # Any python packages within <plugin_package>.* you do NOT want to install with your plugin
 plugin_ignored_packages = []
 
-from distutils.core import setup, Extension
+from setuptools import Extension
 module1 = Extension('translate',
                     sources = ['octoprint_translatemodel/src/translate.cpp'])
 
