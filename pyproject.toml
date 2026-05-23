@@ -12,7 +12,7 @@ authors = [
     {name = "Will MacCormack", email = "willmaccormack@gmail.com"}
 ]
 readme = {file = "README.md", content-type = "text/markdown"}
-requires-python = ">=3, <4"
+requires-python = ">=3.7, <3.14"
 dependencies = ["OctoPrint"]
 
 [project.urls]
@@ -29,4 +29,4 @@ include = ["octoprint_translatemodel", "octoprint_translatemodel.*"]
 
 [[tool.setuptools.ext-modules]]
 name = "translate"
-sources = ["octoprint_translatemodel/src/translate.cpp"]
+sources = ["src/translate.cpp"]
