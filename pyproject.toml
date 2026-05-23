@@ -28,5 +28,5 @@ include-package-data = true
 include = ["octoprint_translatemodel", "octoprint_translatemodel.*"]
 
 [[tool.setuptools.ext-modules]]
-name = "translate"
+name = "octoprint_translatemodel._translate"
 sources = ["src/translate.cpp"]

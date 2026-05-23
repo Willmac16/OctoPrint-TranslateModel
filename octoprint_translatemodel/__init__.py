@@ -7,7 +7,7 @@ from octoprint.access.permissions import Permissions
 
 from octoprint.events import Events
 
-import translate
+from . import _translate as translate
 
 import re, threading, time
 
