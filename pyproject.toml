@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "OctoPrint-TranslateModel"
-version = "0.3.1"
+version = "0.3.2"
 description = "A plugin that translates models on the build plate for printing one after the other."
 license = "AGPL-3.0-or-later"
 license-files = ["LICENSE"]
