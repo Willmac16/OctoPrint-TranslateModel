@@ -605,7 +605,7 @@ static PyMethodDef TranslateMethods[] = {
 
 static struct PyModuleDef translatemodule = {
     PyModuleDef_HEAD_INIT,
-    "translate",   /* name of module */
+    "octoprint_translatemodel._translate",   /* name of module */
     NULL, /* module documentation, may be NULL */
     -1,       /* size of per-interpreter state of the module,
                  or -1 if the module keeps state in global variables. */
@@ -613,7 +613,7 @@ static struct PyModuleDef translatemodule = {
 };
 
 PyMODINIT_FUNC
-PyInit_translate(void)
+PyInit__translate(void)
 {
     logging_library = PyImport_ImportModuleNoBlock("logging");
     logging_object = PyObject_CallMethod(logging_library, "getLogger", "O", Py_BuildValue("s", module_name));
