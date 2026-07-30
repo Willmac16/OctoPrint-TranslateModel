@@ -1,0 +1,67 @@
+name: build
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: py${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # An isolated PEP 517 build of the checked-out tree, which is what
+      # OctoPrint's software update plugin does when it pip-installs
+      # archive/<tag>.zip. pip resolves build-system.requires against *this*
+      # interpreter, so old Pythons get the newest setuptools they can have --
+      # that resolution is what failed on 0.3.2 (issue #24).
+      - name: Build wheel
+        run: pip wheel --no-deps --wheel-dir dist .
+
+      # --no-deps keeps this to seconds and skips OctoPrint's dependency tree;
+      # the checks below never need OctoPrint importable.
+      - name: Install wheel
+        run: pip install --no-deps dist/*.whl
+
+      - name: Check wheel contents and extension
+        run: python .github/scripts/check_build.py dist/*.whl
+
+  build-py37:
+    name: py3.7 (container)
+    runs-on: ubuntu-latest
+    # setup-python has no 3.7 build for ubuntu-24.04 (its manifest stops at
+    # 22.04), so 3.7 is tested in the official image instead. bullseye rather
+    # than buster: actions/checkout runs on Node 20, which needs glibc >= 2.28.
+    #
+    # Any pip works here -- there is no setuptools >=77 candidate for 3.7 at
+    # all, so the 0.3.2 failure reproduces regardless of resolver version.
+    container: python:3.7-bullseye
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build wheel
+        run: pip wheel --no-deps --wheel-dir dist .
+
+      - name: Install wheel
+        run: pip install --no-deps dist/*.whl
+
+      - name: Check wheel contents and extension
+        run: python .github/scripts/check_build.py dist/*.whl
