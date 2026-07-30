@@ -47,11 +47,19 @@ jobs:
         run: python .github/scripts/check_build.py dist/*.whl
 
   plugin-loads:
-    name: OctoPrint plugin discovery
+    name: OctoPrint plugin discovery (${{ matrix.octoprint }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # stable is whatever `pip install OctoPrint` gives a user today; 2.0 is
+        # the next major, in rc since April 2026 and the release that raises
+        # OctoPrint's own Python floor to 3.9.
+        octoprint: [stable, "2.0-prerelease"]
     # 3.11 is what OctoPi's bookworm image ships, so it is the most
-    # representative single version to test discovery on. (It is also the floor
-    # for the tomllib the check script uses to read pyproject.toml.)
+    # representative single version to test discovery on, and it is supported by
+    # both OctoPrint 1.11 and 2.0. (It is also the floor for the tomllib the
+    # check script uses to read pyproject.toml.)
     steps:
       - uses: actions/checkout@v4
 
@@ -66,6 +74,16 @@ jobs:
       # load the plugin against a real OctoPrint.
       - name: Install wheel with OctoPrint
         run: pip install dist/*.whl
+
+      # Upgrading after the fact rather than resolving 2.0 up front, because
+      # that is the order real users hit it: plugin already installed, then
+      # OctoPrint moves to the new major.
+      - name: Upgrade to the OctoPrint 2.0 prerelease
+        if: matrix.octoprint == '2.0-prerelease'
+        run: pip install --upgrade --pre "OctoPrint>=2.0.0rc1,<3"
+
+      - name: Report OctoPrint version
+        run: python -c "import octoprint; print(octoprint.__version__)"
 
       - name: Check OctoPrint discovers and loads the plugin
         run: python .github/scripts/check_plugin_load.py
