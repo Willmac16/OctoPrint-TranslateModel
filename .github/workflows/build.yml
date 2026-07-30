@@ -46,6 +46,30 @@ jobs:
       - name: Check wheel contents and extension
         run: python .github/scripts/check_build.py dist/*.whl
 
+  plugin-loads:
+    name: OctoPrint plugin discovery
+    runs-on: ubuntu-latest
+    # 3.11 is what OctoPi's bookworm image ships, so it is the most
+    # representative single version to test discovery on. (It is also the floor
+    # for the tomllib the check script uses to read pyproject.toml.)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel
+        run: pip wheel --no-deps --wheel-dir dist .
+
+      # Unlike the build jobs, this one installs dependencies: the point is to
+      # load the plugin against a real OctoPrint.
+      - name: Install wheel with OctoPrint
+        run: pip install dist/*.whl
+
+      - name: Check OctoPrint discovers and loads the plugin
+        run: python .github/scripts/check_plugin_load.py
+
   build-py37:
     name: py3.7 (container)
     runs-on: ubuntu-latest
