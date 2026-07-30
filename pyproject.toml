@@ -1,13 +1,21 @@
 [build-system]
-requires = ["setuptools>=77", "wheel"]
+# Keep this floor low enough that Python 3.7 installs (OctoPi 0.18 and older,
+# where the newest available setuptools is 68.0.0) can still build the plugin.
+# 61 is the first release with full [project] table support.
+requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "OctoPrint-TranslateModel"
-version = "0.3.2"
+version = "0.3.3"
 description = "A plugin that translates models on the build plate for printing one after the other."
-license = "AGPL-3.0-or-later"
-license-files = ["LICENSE"]
+# PEP 639 (`license` as an SPDX string plus a top-level `license-files`) needs
+# setuptools >=77, which does not exist for Python 3.7, so stick to the older
+# spelling that every supported setuptools understands. Modern setuptools warns
+# that this form (and tool.setuptools.license-files below) is deprecated, with
+# removal announced for 2027-Feb-18 -- switch to PEP 639 once the Python floor
+# rises past 3.8.
+license = {text = "AGPL-3.0-or-later"}
 authors = [
     {name = "Will MacCormack", email = "willmaccormack@gmail.com"}
 ]
@@ -23,10 +31,11 @@ translatemodel = "octoprint_translatemodel"
 
 [tool.setuptools]
 include-package-data = true
+license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 include = ["octoprint_translatemodel", "octoprint_translatemodel.*"]
 
-[[tool.setuptools.ext-modules]]
-name = "octoprint_translatemodel._translate"
-sources = ["src/translate.cpp"]
+# The C extension is declared in setup.py rather than as
+# [[tool.setuptools.ext-modules]] here: that TOML table only landed in
+# setuptools 74.1, which is out of reach on Python 3.7.
