@@ -46,6 +46,14 @@ jobs:
       - name: Check wheel contents and extension
         run: python .github/scripts/check_build.py dist/*.whl
 
+      # The behavioural half: does it actually translate gcode correctly on
+      # this interpreter. Runs on every version because the extension is
+      # compiled per-Python.
+      - name: Run the translate tests
+        run: |
+          pip install pytest
+          python -m pytest tests -q
+
   plugin-loads:
     name: OctoPrint plugin discovery (${{ matrix.octoprint }})
     runs-on: ubuntu-latest
@@ -111,3 +119,43 @@ jobs:
 
       - name: Check wheel contents and extension
         run: python .github/scripts/check_build.py dist/*.whl
+
+      # pip resolves pytest 7.4.4 here, the last release supporting 3.7.
+      - name: Run the translate tests
+        run: |
+          pip install pytest
+          python -m pytest tests -q
+
+  probe-py314:
+    name: py3.14 (probe)
+    runs-on: ubuntu-latest
+    # requires-python caps at <3.14, so pip refuses 3.14 outright; this forces
+    # the build to answer whether that cap can be lifted. 3.14 shipped in
+    # October 2025 and OctoPrint 2.0 allows up to <3.15, so the cap will start
+    # excluding people. The thing most likely to break is
+    # PyImport_ImportModuleNoBlock in translate.cpp, deprecated since 3.13.
+    #
+    # Informational, hence continue-on-error: a failure here is a version this
+    # package already declares unsupported, not a regression, so unlike the
+    # OctoPrint 2.0 leg it must not gate the branch.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Build wheel
+        run: pip wheel --no-deps --ignore-requires-python --wheel-dir dist .
+
+      - name: Install wheel
+        run: pip install --no-deps --ignore-requires-python dist/*.whl
+
+      - name: Check wheel contents and extension
+        run: python .github/scripts/check_build.py dist/*.whl
+
+      - name: Run the translate tests
+        run: |
+          pip install pytest
+          python -m pytest tests -q
