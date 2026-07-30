@@ -1,8 +1,10 @@
 name: build
 
 on:
+  # Branch pushes are covered by the pull_request event; listing them here as
+  # well would run every commit on an open PR twice.
   push:
-    branches: [main, "claude/**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
