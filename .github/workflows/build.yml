@@ -24,9 +24,9 @@ jobs:
       matrix:
         python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
 
@@ -61,9 +61,9 @@ jobs:
     # both OctoPrint 1.11 and 2.0. (It is also the floor for the tomllib the
     # check script uses to read pyproject.toml.)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -93,13 +93,15 @@ jobs:
     runs-on: ubuntu-latest
     # setup-python has no 3.7 build for ubuntu-24.04 (its manifest stops at
     # 22.04), so 3.7 is tested in the official image instead. bullseye rather
-    # than buster: actions/checkout runs on Node 20, which needs glibc >= 2.28.
+    # than buster: the runner injects its own Node into the container to run
+    # actions/checkout (Node 24 as of v7), which needs glibc >= 2.28. Bullseye
+    # has 2.31; buster sits right on the boundary.
     #
     # Any pip works here -- there is no setuptools >=77 candidate for 3.7 at
     # all, so the 0.3.2 failure reproduces regardless of resolver version.
     container: python:3.7-bullseye
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build wheel
         run: pip wheel --no-deps --wheel-dir dist .
