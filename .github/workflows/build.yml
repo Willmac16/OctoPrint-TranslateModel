@@ -126,6 +126,24 @@ jobs:
           pip install pytest
           python -m pytest tests -q
 
+  lint-js:
+    name: lint browser assets
+    runs-on: ubuntu-latest
+    # static/js is the plugin's browser-facing surface and the part that had
+    # XSS fixes in 0.3.1, and nothing has ever checked it.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install linters
+        run: npm install
+
+      - name: Lint
+        run: npx eslint octoprint_translatemodel/static/js
+
   build-arm64:
     name: arm64 (qemu)
     runs-on: ubuntu-latest
