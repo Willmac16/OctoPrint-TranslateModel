@@ -126,6 +126,44 @@ jobs:
           pip install pytest
           python -m pytest tests -q
 
+  sanitizers:
+    name: asan + ubsan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Build the extension with sanitizers
+        env:
+          CFLAGS: "-fsanitize=address,undefined -fno-omit-frame-pointer -g"
+          LDFLAGS: "-fsanitize=address,undefined"
+        run: pip wheel --no-deps --wheel-dir dist .
+
+      - name: Install wheel
+        run: pip install --no-deps dist/*.whl
+
+      # The interpreter is not instrumented, so the runtimes come in through
+      # LD_PRELOAD. libstdc++ must be preloaded alongside libasan: otherwise
+      # asan's __cxa_throw interceptor cannot resolve the real symbol and the
+      # first C++ exception aborts the process with a CHECK failure -- and the
+      # invalid-regex tests throw on purpose.
+      #
+      # Leak detection is off because uninstrumented CPython would drown the
+      # log in its own allocations; this job is for memory errors and
+      # undefined behaviour. halt_on_error makes ubsan fail the job instead of
+      # printing and carrying on, which would let UB pass as green.
+      - name: Run the tests under the sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          pip install pytest
+          LD_PRELOAD="$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libstdc++.so.6)" \
+            python -m pytest tests -q
+
   probe-py314:
     name: py3.14 (probe)
     runs-on: ubuntu-latest
