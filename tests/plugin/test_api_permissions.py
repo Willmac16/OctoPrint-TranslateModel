@@ -181,6 +181,25 @@ class TestRequestHandling:
         plugin.on_api_command("preview", translate_request(at="print"))
         assert RecordingWorker.started[0]["after_translate"] == "preview"
 
+    def test_duplicate_request_reports_running_instead_of_starting_again(self, api):
+        # The same file with the same shifts, while the first is still in
+        # flight. This used to raise UnboundLocalError, so the UI got a 500
+        # rather than the "already running" notification.
+        plugin = api.configure()
+        plugin.on_api_command("translate", translate_request())
+        plugin.on_api_command("translate", translate_request())
+
+        assert len(RecordingWorker.started) == 1
+        assert plugin._plugin_manager.messages[-1]["state"] == "running"
+        assert plugin._plugin_manager.messages[-1]["shifts"] == 1
+
+    def test_different_shifts_are_not_a_duplicate(self, api):
+        plugin = api.configure()
+        plugin.on_api_command("translate", translate_request(shifts=((10, 20),)))
+        plugin.on_api_command("translate", translate_request(shifts=((30, 40),)))
+
+        assert len(RecordingWorker.started) == 2
+
     def test_test_command_starts_nothing(self, api):
         plugin = api.configure()
         plugin.on_api_command("test", {})
