@@ -55,7 +55,7 @@ jobs:
           python -m pytest tests -q
 
   plugin-loads:
-    name: OctoPrint plugin discovery (${{ matrix.octoprint }})
+    name: OctoPrint plugin discovery (${{ matrix.octoprint }}, py${{ matrix.python }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -63,17 +63,26 @@ jobs:
         # stable is whatever `pip install OctoPrint` gives a user today; 2.0 is
         # the next major, in rc since April 2026 and the release that raises
         # OctoPrint's own Python floor to 3.9.
-        octoprint: [stable, "2.0-prerelease"]
-    # 3.11 is what OctoPi's bookworm image ships, so it is the most
-    # representative single version to test discovery on, and it is supported by
-    # both OctoPrint 1.11 and 2.0. (It is also the floor for the tomllib the
-    # check script uses to read pyproject.toml.)
+        #
+        # 3.11 is what OctoPi's bookworm image ships, so it is the most
+        # representative pairing for both majors. (It is also the floor for the
+        # tomllib the check script uses to read pyproject.toml.)
+        include:
+          - octoprint: stable
+            python: "3.11"
+          - octoprint: "2.0-prerelease"
+            python: "3.11"
+          # OctoPrint 1.11 caps at <3.14, so 2.0 is the only major a 3.14 user
+          # can run -- this is the combination that raising requires-python
+          # actually opens up.
+          - octoprint: "2.0-prerelease"
+            python: "3.14"
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
 
       - name: Build wheel
         run: pip wheel --no-deps --wheel-dir dist .
