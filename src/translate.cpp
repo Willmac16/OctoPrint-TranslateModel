@@ -671,7 +671,9 @@ static struct PyModuleDef translatemodule = {
 PyMODINIT_FUNC
 PyInit__translate(void)
 {
-    logging_library = PyImport_ImportModuleNoBlock("logging");
+    // PyImport_ImportModuleNoBlock has been a plain alias for this since
+    // Python 3.3, was deprecated in 3.13 and is removed in 3.15.
+    logging_library = PyImport_ImportModule("logging");
     logging_object = PyObject_CallMethod(logging_library, "getLogger", "O", Py_BuildValue("s", module_name));
     Py_XINCREF(logging_object);
 
