@@ -1,0 +1,27 @@
+name: release
+
+on:
+  push:
+    tags: ["*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to check against pyproject.toml
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  tag-matches-version:
+    name: tag matches pyproject version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Compare tag to pyproject.toml
+        run: python .github/scripts/check_release.py "${{ inputs.tag || github.ref_name }}"
