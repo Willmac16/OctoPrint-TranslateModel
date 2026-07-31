@@ -88,7 +88,7 @@ $(function() {
                         hide: false
                     });
                 } else if (data.state === "running") {
-                    runnDict = {
+                    const runnDict = {
                         title: 'Running Translating Model',
                         type: 'info',
                         text: `Moving ${_.escape(data.file)}`,
@@ -112,7 +112,7 @@ $(function() {
                     else
                         lastText += `is available @ ${_.escape(data.path)}`;
 
-                    finishDict = {
+                    const finishDict = {
                         type: 'success',
                         title: 'Finished Translating Model',
                         text: `${_.escape(data.file)} moved <br/> took ${_.escape(data.time.toFixed(2))}s ${lastText}`}
