@@ -11,6 +11,13 @@ import sys
 
 import pytest
 
+# Drop the working directory before any test module is imported. The repo root
+# holds an octoprint_translatemodel/ source directory with no compiled
+# extension beside it, which would otherwise shadow the installed package that
+# the tests are meant to exercise.
+_CWD = os.getcwd()
+sys.path[:] = [p for p in sys.path if p not in ("", ".", _CWD)]
+
 PACKAGE = "octoprint_translatemodel"
 EXT_MODULE = "_translate"
 
@@ -26,11 +33,6 @@ VERSION = "0.0.0-test"
 
 
 def _load_extension():
-    # Keep an in-tree ./octoprint_translatemodel (no compiled extension beside
-    # it) from shadowing the installed package.
-    cwd = os.getcwd()
-    sys.path[:] = [p for p in sys.path if p not in ("", ".", cwd)]
-
     spec = importlib.util.find_spec(PACKAGE)
     if spec is None or not spec.submodule_search_locations:
         raise RuntimeError(
