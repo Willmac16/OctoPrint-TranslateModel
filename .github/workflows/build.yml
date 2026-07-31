@@ -126,6 +126,30 @@ jobs:
           pip install pytest
           python -m pytest tests -q
 
+  build-arm64:
+    name: arm64 (qemu)
+    runs-on: ubuntu-latest
+    # Every other job builds x86, and every real user is on a Raspberry Pi.
+    # That matters for more than "it compiles": plain `char` is unsigned by
+    # default on ARM and signed on x86, and translate.cpp parses gcode a
+    # character at a time. This is the only job that would catch it.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - name: Build and test under arm64
+        run: |
+          docker run --rm --platform linux/arm64 -v "$PWD:/src" -w /src python:3.11-bookworm bash -euc '
+            pip wheel --no-deps --wheel-dir dist-arm64 .
+            pip install --no-deps dist-arm64/*.whl
+            python .github/scripts/check_build.py dist-arm64/*.whl
+            pip install pytest
+            python -m pytest tests -q
+          '
+
   sdist:
     name: sdist round-trip
     runs-on: ubuntu-latest
