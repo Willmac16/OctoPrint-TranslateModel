@@ -11,3 +11,14 @@ updates:
       actions:
         patterns:
           - "*"
+
+  # The lint tooling in package.json, which has no lockfile -- so without this
+  # a new eslint major is only noticed when the job breaks.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      lint:
+        patterns:
+          - "*"
