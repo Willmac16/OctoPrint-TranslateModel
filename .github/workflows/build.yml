@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
 
@@ -239,14 +239,15 @@ jobs:
           LD_PRELOAD="$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libstdc++.so.6)" \
             python -m pytest tests -q
 
-  probe-py314:
-    name: py3.14 (probe)
+  probe-py315:
+    name: py3.15 (probe)
     runs-on: ubuntu-latest
-    # requires-python caps at <3.14, so pip refuses 3.14 outright; this forces
-    # the build to answer whether that cap can be lifted. 3.14 shipped in
-    # October 2025 and OctoPrint 2.0 allows up to <3.15, so the cap will start
-    # excluding people. The thing most likely to break is
-    # PyImport_ImportModuleNoBlock in translate.cpp, deprecated since 3.13.
+    # The same trick the 3.14 probe used before 3.14 was promoted into the
+    # matrix above: requires-python caps at <3.15, so pip refuses 3.15
+    # outright, and this forces the build to answer whether the next cap can
+    # be lifted too. 3.15 is in beta; its headline risk for this extension was
+    # PyImport_ImportModuleNoBlock, which 3.15 removes and which translate.cpp
+    # no longer calls.
     #
     # Informational, hence continue-on-error: a failure here is a version this
     # package already declares unsupported, not a regression, so unlike the
@@ -257,7 +258,8 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.14"
+          python-version: "3.15"
+          allow-prereleases: true
 
       - name: Build wheel
         run: pip wheel --no-deps --ignore-requires-python --wheel-dir dist .
