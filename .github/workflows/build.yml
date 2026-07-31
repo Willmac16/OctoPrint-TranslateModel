@@ -1,0 +1,305 @@
+name: build
+
+on:
+  # Branch pushes are covered by the pull_request event; listing them here as
+  # well would run every commit on an open PR twice.
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: py${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+
+      # An isolated PEP 517 build of the checked-out tree, which is what
+      # OctoPrint's software update plugin does when it pip-installs
+      # archive/<tag>.zip. pip resolves build-system.requires against *this*
+      # interpreter, so old Pythons get the newest setuptools they can have --
+      # that resolution is what failed on 0.3.2 (issue #24).
+      - name: Build wheel
+        run: pip wheel --no-deps --wheel-dir dist .
+
+      # --no-deps keeps this to seconds and skips OctoPrint's dependency tree;
+      # the checks below never need OctoPrint importable.
+      - name: Install wheel
+        run: pip install --no-deps dist/*.whl
+
+      - name: Check wheel contents and extension
+        run: python .github/scripts/check_build.py dist/*.whl
+
+      # The behavioural half: does it actually translate gcode correctly on
+      # this interpreter. Runs on every version because the extension is
+      # compiled per-Python.
+      - name: Run the translate tests
+        run: |
+          pip install pytest
+          python -m pytest tests -q
+
+  plugin-loads:
+    name: OctoPrint plugin discovery (${{ matrix.octoprint }}, py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # stable is whatever `pip install OctoPrint` gives a user today; 2.0 is
+        # the next major, in rc since April 2026 and the release that raises
+        # OctoPrint's own Python floor to 3.9.
+        #
+        # 3.11 is what OctoPi's bookworm image ships, so it is the most
+        # representative pairing for both majors. (It is also the floor for the
+        # tomllib the check script uses to read pyproject.toml.)
+        include:
+          - octoprint: stable
+            python: "3.11"
+          - octoprint: "2.0-prerelease"
+            python: "3.11"
+          # OctoPrint 1.11 caps at <3.14, so 2.0 is the only major a 3.14 user
+          # can run -- this is the combination that raising requires-python
+          # opens up. It does not install yet, and not for any reason this
+          # plugin controls: PyYAML has no 3.14 wheel at the version 2.0
+          # resolves, so pip builds it from source and its setup.py fails
+          # against modern setuptools.
+          #
+          # So this leg is a canary: the install is allowed to fail on 3.14 and
+          # the checks are skipped with a notice, rather than leaving a red X
+          # standing permanently for something outside this repo. The moment
+          # OctoPrint 2.0 installs on 3.14, the checks below start running for
+          # real without any change here.
+          - octoprint: "2.0-prerelease"
+            python: "3.14"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Build wheel
+        run: pip wheel --no-deps --wheel-dir dist .
+
+      # Unlike the build jobs, this one installs dependencies: the point is to
+      # load the plugin against a real OctoPrint.
+      - name: Install wheel with OctoPrint
+        id: install
+        continue-on-error: ${{ matrix.python == '3.14' }}
+        run: pip install dist/*.whl
+
+      # Upgrading after the fact rather than resolving 2.0 up front, because
+      # that is the order real users hit it: plugin already installed, then
+      # OctoPrint moves to the new major.
+      - name: Upgrade to the OctoPrint 2.0 prerelease
+        id: upgrade
+        if: matrix.octoprint == '2.0-prerelease' && steps.install.outcome == 'success'
+        continue-on-error: ${{ matrix.python == '3.14' }}
+        run: pip install --upgrade --pre "OctoPrint>=2.0.0rc1,<3"
+
+      - name: Note that OctoPrint is not installable here yet
+        if: steps.install.outcome == 'failure' || steps.upgrade.outcome == 'failure'
+        run: |
+          echo "::notice::OctoPrint ${{ matrix.octoprint }} still does not install on Python ${{ matrix.python }}; discovery checks skipped."
+
+      - name: Report OctoPrint version
+        if: steps.install.outcome == 'success' && steps.upgrade.outcome != 'failure'
+        run: python -c "import octoprint; print(octoprint.__version__)"
+
+      - name: Check OctoPrint discovers and loads the plugin
+        if: steps.install.outcome == 'success' && steps.upgrade.outcome != 'failure'
+        run: python .github/scripts/check_plugin_load.py
+
+  build-py37:
+    name: py3.7 (container)
+    runs-on: ubuntu-latest
+    # setup-python has no 3.7 build for ubuntu-24.04 (its manifest stops at
+    # 22.04), so 3.7 is tested in the official image instead. bullseye rather
+    # than buster: the runner injects its own Node into the container to run
+    # actions/checkout (Node 24 as of v7), which needs glibc >= 2.28. Bullseye
+    # has 2.31; buster sits right on the boundary.
+    #
+    # Any pip works here -- there is no setuptools >=77 candidate for 3.7 at
+    # all, so the 0.3.2 failure reproduces regardless of resolver version.
+    container: python:3.7-bullseye
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build wheel
+        run: pip wheel --no-deps --wheel-dir dist .
+
+      - name: Install wheel
+        run: pip install --no-deps dist/*.whl
+
+      - name: Check wheel contents and extension
+        run: python .github/scripts/check_build.py dist/*.whl
+
+      # pip resolves pytest 7.4.4 here, the last release supporting 3.7.
+      - name: Run the translate tests
+        run: |
+          pip install pytest
+          python -m pytest tests -q
+
+  lint-js:
+    name: lint browser assets
+    runs-on: ubuntu-latest
+    # static/js is the plugin's browser-facing surface and the part that had
+    # XSS fixes in 0.3.1, and nothing has ever checked it.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install linters
+        run: npm install
+
+      - name: Lint
+        run: npx eslint octoprint_translatemodel/static/js
+
+  build-arm64:
+    name: arm64 (qemu)
+    runs-on: ubuntu-latest
+    # Every other job builds x86, and every real user is on a Raspberry Pi.
+    # That matters for more than "it compiles": plain `char` is unsigned by
+    # default on ARM and signed on x86, and translate.cpp parses gcode a
+    # character at a time. This is the only job that would catch it.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - name: Build and test under arm64
+        run: |
+          docker run --rm --platform linux/arm64 -v "$PWD:/src" -w /src python:3.11-bookworm bash -euc '
+            pip wheel --no-deps --wheel-dir dist-arm64 .
+            pip install --no-deps dist-arm64/*.whl
+            python .github/scripts/check_build.py dist-arm64/*.whl
+            pip install pytest
+            python -m pytest tests -q
+          '
+
+  sdist:
+    name: sdist round-trip
+    runs-on: ubuntu-latest
+    # The build jobs all start from the checked-out tree, which is what
+    # OctoPrint installs. This one goes through an sdist instead, so a
+    # MANIFEST.in that stops shipping src/translate.cpp fails here rather than
+    # on PyPI.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist
+        run: |
+          pip install build
+          python -m build --sdist -o dist .
+
+      - name: Build a wheel from the sdist, not from the tree
+        run: pip wheel --no-deps --wheel-dir from-sdist dist/*.tar.gz
+
+      - name: Install wheel
+        run: pip install --no-deps from-sdist/*.whl
+
+      - name: Check wheel contents and extension
+        run: python .github/scripts/check_build.py from-sdist/*.whl
+
+      - name: Run the translate tests
+        run: |
+          pip install pytest
+          python -m pytest tests -q
+
+  sanitizers:
+    name: asan + ubsan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Build the extension with sanitizers
+        env:
+          CFLAGS: "-fsanitize=address,undefined -fno-omit-frame-pointer -g"
+          LDFLAGS: "-fsanitize=address,undefined"
+        run: pip wheel --no-deps --wheel-dir dist .
+
+      - name: Install wheel
+        run: pip install --no-deps dist/*.whl
+
+      # The interpreter is not instrumented, so the runtimes come in through
+      # LD_PRELOAD. libstdc++ must be preloaded alongside libasan: otherwise
+      # asan's __cxa_throw interceptor cannot resolve the real symbol and the
+      # first C++ exception aborts the process with a CHECK failure -- and the
+      # invalid-regex tests throw on purpose.
+      #
+      # Leak detection is off because uninstrumented CPython would drown the
+      # log in its own allocations; this job is for memory errors and
+      # undefined behaviour. halt_on_error makes ubsan fail the job instead of
+      # printing and carrying on, which would let UB pass as green.
+      - name: Run the tests under the sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          pip install pytest
+          LD_PRELOAD="$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libstdc++.so.6)" \
+            python -m pytest tests -q
+
+  probe-py315:
+    name: py3.15 (probe)
+    runs-on: ubuntu-latest
+    # The same trick the 3.14 probe used before 3.14 was promoted into the
+    # matrix above: requires-python caps at <3.15, so pip refuses 3.15
+    # outright, and this forces the build to answer whether the next cap can
+    # be lifted too. 3.15 is in beta; its headline risk for this extension was
+    # PyImport_ImportModuleNoBlock, which 3.15 removes and which translate.cpp
+    # no longer calls.
+    #
+    # Informational, hence continue-on-error: a failure here is a version this
+    # package already declares unsupported, not a regression, so unlike the
+    # OctoPrint 2.0 leg it must not gate the branch.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.15"
+          allow-prereleases: true
+
+      - name: Build wheel
+        run: pip wheel --no-deps --ignore-requires-python --wheel-dir dist .
+
+      - name: Install wheel
+        run: pip install --no-deps --ignore-requires-python dist/*.whl
+
+      - name: Check wheel contents and extension
+        run: python .github/scripts/check_build.py dist/*.whl
+
+      - name: Run the translate tests
+        run: |
+          pip install pytest
+          python -m pytest tests -q

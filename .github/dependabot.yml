@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # checkout and setup-python sat three majors behind before anyone noticed;
+  # this is the cheap way to not repeat that. Monthly and grouped, so a small
+  # repo gets one PR rather than a trickle.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  # The lint tooling in package.json, which has no lockfile -- so without this
+  # a new eslint major is only noticed when the job breaks.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      lint:
+        patterns:
+          - "*"

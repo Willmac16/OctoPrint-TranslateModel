@@ -3,10 +3,12 @@
 
 #include <regex>
 
+#include <array>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <iostream>
+#include <vector>
 
 // Logging Vars
 static char module_name[] = "octoprint.plugins.translatemodel-C++";
@@ -24,8 +26,8 @@ void info(std::string msg)
 {
     Py_BLOCK_THREADS
     PyObject *logging_message = Py_BuildValue("s", msg.c_str());
-    Py_XINCREF(logging_message);
-    PyObject_CallMethod(logging_object, "info", "O", logging_message, NULL);
+    PyObject *logging_result = PyObject_CallMethod(logging_object, "info", "O", logging_message, NULL);
+    Py_XDECREF(logging_result);
 
     Py_DECREF(logging_message);
     Py_UNBLOCK_THREADS
@@ -36,8 +38,8 @@ void debug(std::string msg)
 {
     Py_BLOCK_THREADS
     PyObject *logging_message = Py_BuildValue("s", msg.c_str());
-    Py_XINCREF(logging_message);
-    PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    PyObject *logging_result = PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    Py_XDECREF(logging_result);
 
     Py_DECREF(logging_message);
     Py_UNBLOCK_THREADS
@@ -495,8 +497,8 @@ translate_translate(PyObject *self, PyObject *args)
     int preview = false;
 
     PyObject *logging_message = Py_BuildValue("s", "Before tuple parse");
-    Py_XINCREF(logging_message);
-    PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    PyObject *logging_result = PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    Py_XDECREF(logging_result);
     Py_DECREF(logging_message);
 
     // ADD THE 2 PARENTHESIS AFTER FINAL VAR (THIS HAS HAPPENED TWICE NOW)
@@ -504,50 +506,104 @@ translate_translate(PyObject *self, PyObject *args)
                                             &sr, &er,
                                             &ver, &preview))
         return NULL;
-    Py_INCREF(shiftList);
 
     logging_message = Py_BuildValue("s", "After tuple parse");
-    Py_XINCREF(logging_message);
-    PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    logging_result = PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    Py_XDECREF(logging_result);
     Py_DECREF(logging_message);
 
     // parse through all the shifts
-    shiftList = PySequence_Fast(shiftList, "argument must be iterable");
-    if(!shiftList)
-        return 0;
+    PyObject *fastShiftList = PySequence_Fast(shiftList, "shifts must be a sequence");
+    if (!fastShiftList)
+        return NULL;
 
-    const int numShifts = PySequence_Fast_GET_SIZE(shiftList);
-    double shifts[numShifts][2];
+    const Py_ssize_t numShifts = PySequence_Fast_GET_SIZE(fastShiftList);
 
-    for (int i = 0; i < numShifts; i++)
+    if (numShifts < 1)
     {
-        PyObject *shiftSet = PySequence_Fast_GET_ITEM(shiftList, i);
-        shiftSet = PySequence_Fast(shiftSet, "argument must be iterable");
+        // translate() reads shifts[0] on the single-shift path, so an empty
+        // list would run off the end of the array.
+        PyErr_SetString(PyExc_ValueError, "at least one shift is required");
+        Py_DECREF(fastShiftList);
+        return NULL;
+    }
+
+    // On the heap rather than a stack VLA: numShifts comes straight from the
+    // caller, and a long enough list overflows the stack.
+    std::vector<std::array<double, 2>> shiftStore(numShifts);
+
+    for (Py_ssize_t i = 0; i < numShifts; i++)
+    {
+        PyObject *shiftSet = PySequence_Fast(PySequence_Fast_GET_ITEM(fastShiftList, i),
+                                             "each shift must be a sequence");
+        if (!shiftSet)
+        {
+            Py_DECREF(fastShiftList);
+            return NULL;
+        }
+
+        if (PySequence_Fast_GET_SIZE(shiftSet) < 2)
+        {
+            PyErr_SetString(PyExc_ValueError, "each shift needs both an x and a y value");
+            Py_DECREF(shiftSet);
+            Py_DECREF(fastShiftList);
+            return NULL;
+        }
 
         // Get the x then y coord and convert to pyfloat then c double
         for (int j = 0; j < 2; j++)
         {
-            shifts[i][j] = PyFloat_AS_DOUBLE(PyNumber_Float(PySequence_Fast_GET_ITEM(shiftSet, j)));
+            PyObject *coord = PyNumber_Float(PySequence_Fast_GET_ITEM(shiftSet, j));
+            if (!coord)
+            {
+                // PyNumber_Float has already set a TypeError.
+                Py_DECREF(shiftSet);
+                Py_DECREF(fastShiftList);
+                return NULL;
+            }
+            shiftStore[i][j] = PyFloat_AS_DOUBLE(coord);
+            Py_DECREF(coord);
         }
+
+        Py_DECREF(shiftSet);
     }
 
-    // for (int i = 0; i < numShifts; i++)
-    // {
-    //     std::cout << shifts[i][0] << ", " << shifts[i][1] << std::endl;
-    // }
+    Py_DECREF(fastShiftList);
+
+    // std::array<double, 2> has the same layout as double[2], so translate()
+    // keeps its existing signature.
+    double (*shifts)[2] = reinterpret_cast<double (*)[2]>(shiftStore.data());
 
     std::string opath;
-
-    Py_DECREF(shiftList);
+    std::string failure;
 
     Py_UNBLOCK_THREADS
     debug("Started translating");
 
     // opath is output path if regular, but is actually the gcode preview for preview mode
-    opath = translate(shifts, numShifts, (std::string) path,
-                        (std::string) sr, (std::string) er, (std::string) ver, preview);
+    //
+    // The layer-start and stop patterns come from plugin settings, so an
+    // invalid one throws std::regex_error in here. Letting a C++ exception
+    // escape into CPython calls std::terminate, which takes the whole
+    // OctoPrint process down mid-print -- catch it and raise instead.
+    try
+    {
+        opath = translate(shifts, (int) numShifts, (std::string) path,
+                            (std::string) sr, (std::string) er, (std::string) ver, preview);
+    }
+    catch (const std::exception &error)
+    {
+        failure = error.what();
+    }
     debug("Done translating");
     Py_BLOCK_THREADS
+
+    if (!failure.empty())
+    {
+        PyErr_SetString(PyExc_ValueError, failure.c_str());
+        return NULL;
+    }
+
     return Py_BuildValue("s", opath.c_str());
 }
 
@@ -615,7 +671,9 @@ static struct PyModuleDef translatemodule = {
 PyMODINIT_FUNC
 PyInit__translate(void)
 {
-    logging_library = PyImport_ImportModuleNoBlock("logging");
+    // PyImport_ImportModuleNoBlock has been a plain alias for this since
+    // Python 3.3, was deprecated in 3.13 and is removed in 3.15.
+    logging_library = PyImport_ImportModule("logging");
     logging_object = PyObject_CallMethod(logging_library, "getLogger", "O", Py_BuildValue("s", module_name));
     Py_XINCREF(logging_object);
 

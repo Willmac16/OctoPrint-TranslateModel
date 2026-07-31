@@ -173,7 +173,7 @@ class TranslatemodelPlugin(octoprint.plugin.SettingsPlugin,
 													), index)
 						worker.start()
 					else:
-						self._plugin_manager.send_plugin_message("translatemodel", dict(state='running', file=data['file'], shifts=len(shifts), index=index))
+						self._plugin_manager.send_plugin_message("translatemodel", dict(state='running', file=data['file'], shifts=len(data['shifts']), index=index))
 				else:
 					self._plugin_manager.send_plugin_message("translatemodel", dict(state='invalid', file=data['file']))
 		elif command == "preview":
