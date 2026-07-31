@@ -26,8 +26,8 @@ void info(std::string msg)
 {
     Py_BLOCK_THREADS
     PyObject *logging_message = Py_BuildValue("s", msg.c_str());
-    Py_XINCREF(logging_message);
-    PyObject_CallMethod(logging_object, "info", "O", logging_message, NULL);
+    PyObject *logging_result = PyObject_CallMethod(logging_object, "info", "O", logging_message, NULL);
+    Py_XDECREF(logging_result);
 
     Py_DECREF(logging_message);
     Py_UNBLOCK_THREADS
@@ -38,8 +38,8 @@ void debug(std::string msg)
 {
     Py_BLOCK_THREADS
     PyObject *logging_message = Py_BuildValue("s", msg.c_str());
-    Py_XINCREF(logging_message);
-    PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    PyObject *logging_result = PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    Py_XDECREF(logging_result);
 
     Py_DECREF(logging_message);
     Py_UNBLOCK_THREADS
@@ -497,8 +497,8 @@ translate_translate(PyObject *self, PyObject *args)
     int preview = false;
 
     PyObject *logging_message = Py_BuildValue("s", "Before tuple parse");
-    Py_XINCREF(logging_message);
-    PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    PyObject *logging_result = PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    Py_XDECREF(logging_result);
     Py_DECREF(logging_message);
 
     // ADD THE 2 PARENTHESIS AFTER FINAL VAR (THIS HAS HAPPENED TWICE NOW)
@@ -508,8 +508,8 @@ translate_translate(PyObject *self, PyObject *args)
         return NULL;
 
     logging_message = Py_BuildValue("s", "After tuple parse");
-    Py_XINCREF(logging_message);
-    PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    logging_result = PyObject_CallMethod(logging_object, "debug", "O", logging_message, NULL);
+    Py_XDECREF(logging_result);
     Py_DECREF(logging_message);
 
     // parse through all the shifts
