@@ -77,11 +77,15 @@ jobs:
           # opens up. It does not install yet, and not for any reason this
           # plugin controls: PyYAML has no 3.14 wheel at the version 2.0
           # resolves, so pip builds it from source and its setup.py fails
-          # against modern setuptools. Informational until that clears, at
-          # which point this leg going green is the signal.
+          # against modern setuptools.
+          #
+          # So this leg is a canary: the install is allowed to fail on 3.14 and
+          # the checks are skipped with a notice, rather than leaving a red X
+          # standing permanently for something outside this repo. The moment
+          # OctoPrint 2.0 installs on 3.14, the checks below start running for
+          # real without any change here.
           - octoprint: "2.0-prerelease"
             python: "3.14"
-    continue-on-error: ${{ matrix.python == '3.14' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -95,19 +99,30 @@ jobs:
       # Unlike the build jobs, this one installs dependencies: the point is to
       # load the plugin against a real OctoPrint.
       - name: Install wheel with OctoPrint
+        id: install
+        continue-on-error: ${{ matrix.python == '3.14' }}
         run: pip install dist/*.whl
 
       # Upgrading after the fact rather than resolving 2.0 up front, because
       # that is the order real users hit it: plugin already installed, then
       # OctoPrint moves to the new major.
       - name: Upgrade to the OctoPrint 2.0 prerelease
-        if: matrix.octoprint == '2.0-prerelease'
+        id: upgrade
+        if: matrix.octoprint == '2.0-prerelease' && steps.install.outcome == 'success'
+        continue-on-error: ${{ matrix.python == '3.14' }}
         run: pip install --upgrade --pre "OctoPrint>=2.0.0rc1,<3"
 
+      - name: Note that OctoPrint is not installable here yet
+        if: steps.install.outcome == 'failure' || steps.upgrade.outcome == 'failure'
+        run: |
+          echo "::notice::OctoPrint ${{ matrix.octoprint }} still does not install on Python ${{ matrix.python }}; discovery checks skipped."
+
       - name: Report OctoPrint version
+        if: steps.install.outcome == 'success' && steps.upgrade.outcome != 'failure'
         run: python -c "import octoprint; print(octoprint.__version__)"
 
       - name: Check OctoPrint discovers and loads the plugin
+        if: steps.install.outcome == 'success' && steps.upgrade.outcome != 'failure'
         run: python .github/scripts/check_plugin_load.py
 
   build-py37:
