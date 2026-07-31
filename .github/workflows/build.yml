@@ -126,6 +126,39 @@ jobs:
           pip install pytest
           python -m pytest tests -q
 
+  sdist:
+    name: sdist round-trip
+    runs-on: ubuntu-latest
+    # The build jobs all start from the checked-out tree, which is what
+    # OctoPrint installs. This one goes through an sdist instead, so a
+    # MANIFEST.in that stops shipping src/translate.cpp fails here rather than
+    # on PyPI.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist
+        run: |
+          pip install build
+          python -m build --sdist -o dist .
+
+      - name: Build a wheel from the sdist, not from the tree
+        run: pip wheel --no-deps --wheel-dir from-sdist dist/*.tar.gz
+
+      - name: Install wheel
+        run: pip install --no-deps from-sdist/*.whl
+
+      - name: Check wheel contents and extension
+        run: python .github/scripts/check_build.py from-sdist/*.whl
+
+      - name: Run the translate tests
+        run: |
+          pip install pytest
+          python -m pytest tests -q
+
   sanitizers:
     name: asan + ubsan
     runs-on: ubuntu-latest
